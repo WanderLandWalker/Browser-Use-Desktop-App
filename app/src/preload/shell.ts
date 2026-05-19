@@ -21,6 +21,20 @@ function normalizeSettingsOpenPayload(raw: unknown): SettingsOpenPayload | undef
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Structured renderer log bridge — see renderer/shared/logger.ts and
+  // main/rendererLogIpc.ts. Fire-and-forget; never blocks the caller.
+  log: (
+    level: 'debug' | 'info' | 'warn' | 'error',
+    ns: string,
+    msg: string,
+    extra?: Record<string, unknown>,
+  ): void => {
+    try {
+      ipcRenderer.send('renderer:log', level, ns, msg, extra);
+    } catch {
+      // Swallow — logging must not crash the renderer.
+    }
+  },
   shell: {
     platform: process.platform,
     getPlatform: (): Promise<string> => ipcRenderer.invoke('shell:get-platform'),

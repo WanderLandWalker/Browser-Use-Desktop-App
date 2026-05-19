@@ -120,6 +120,7 @@ import { registerAppPopupHandlers, warmAppPopup } from './appPopup';
 import { captureEvent } from './telemetry';
 import { registerChromeImportHandlers } from './chrome-import/ipc';
 import { mainLogger } from './logger';
+import { registerRendererLogIpc } from './rendererLogIpc';
 import { createLocalTaskServer } from './localTaskServer';
 import {
   resolveUserDataDir,
@@ -2083,6 +2084,11 @@ ipcMain.handle('shell:get-platform', () => {
   mainLogger.debug('main.shell:get-platform', { platform: process.platform });
   return process.platform;
 });
+
+// Structured renderer log forwarding — see main/rendererLogIpc.ts and
+// renderer/shared/logger.ts. Registered alongside other preload-safe
+// channels so the bridge is ready before any window finishes loading.
+registerRendererLogIpc();
 
 // Theme IPC must be ready before any renderer can call `theme:get`. A
 // startup race (second-instance, dev-server reload) can spin up a window
