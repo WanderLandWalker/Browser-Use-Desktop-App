@@ -16,6 +16,7 @@ import { orderSessionsForSidebar } from './sessionOrdering';
 import { ChatPane } from './chat/ChatPane';
 import { useUIStore } from './state/uiStore';
 import { useSessionsBridge } from './state/useSessionsBridge';
+import buLogoWhite from './bu-logo-white.svg';
 
 type ViewMode = 'dashboard' | 'grid' | 'chat' | 'settings';
 type SettingsOpenPayload = {
@@ -470,7 +471,17 @@ export function HubApp(): React.ReactElement {
     <div className="hub-root">
       <header className="hub-toolbar">
         <div className="hub-toolbar__left">
-          <span className="hub-toolbar__title">Browser Use</span>
+          <button
+            type="button"
+            className="hub-toolbar__brand"
+            onClick={() => setViewMode('dashboard')}
+            aria-label="Go to dashboard"
+            data-tip="Dashboard"
+            disabled={viewMode === 'dashboard'}
+          >
+            <img src={buLogoWhite} alt="" className="hub-toolbar__brand-logo" />
+            <span className="hub-toolbar__brand-text">Browser Use</span>
+          </button>
           <MemoryIndicator
             onOpenSettings={() => openSettingsPage()}
             settingsShortcut={shortcutFor('goto.settings')}

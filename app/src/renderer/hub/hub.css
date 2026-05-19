@@ -113,6 +113,43 @@
   text-transform: uppercase;
 }
 
+.hub-toolbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 6px;
+  margin: -4px -6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  color: var(--color-fg-primary);
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.hub-toolbar__brand-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-primary);
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.hub-toolbar__brand:hover:not(:disabled) {
+  background-color: var(--color-bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.hub-toolbar__brand:disabled {
+  cursor: default;
+}
+
+.hub-toolbar__brand-logo {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .hub-toolbar__count {
   display: flex;
   align-items: center;
