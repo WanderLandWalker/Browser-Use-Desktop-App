@@ -168,7 +168,7 @@ function UserBubble({ content, onEdit, onShare, sessionId, attachmentTurnIndex }
     <div className="chat-bubble__wrap">
       {attachments.length > 0 && (
         <div className="chat-bubble__attachments">
-          <AttachmentList items={attachments} variant="grid" />
+          <AttachmentList items={attachments} variant="gallery" />
         </div>
       )}
       <div className={`chat-bubble${clamped ? ' chat-bubble--clamped' : ''}`}>

@@ -18,7 +18,7 @@
 import React from 'react';
 import './attachments.css';
 
-type Variant = 'grid' | 'list' | 'inline';
+type Variant = 'grid' | 'gallery' | 'list' | 'inline';
 
 export function Attachments({
   variant = 'grid',
