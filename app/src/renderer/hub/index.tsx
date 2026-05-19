@@ -16,17 +16,20 @@ import '../design/empty-states.css';
 import '@/renderer/components/base/components.css';
 import './hub.css';
 import { initThemeMode } from '@/renderer/design/themeMode';
+import { makeLogger } from '@/renderer/shared/logger';
 
 // Apply shell theme — hub uses the same dark palette
 document.documentElement.dataset.theme = 'shell';
 initThemeMode();
 
+const log = makeLogger('hub');
+
 window.addEventListener('error', (e) => {
-  console.error('[hub] renderer.error', { message: e.message, file: e.filename, line: e.lineno });
+  log.error('renderer.error', { message: e.message, file: e.filename, line: e.lineno });
 });
 
 window.addEventListener('unhandledrejection', (e) => {
-  console.error('[hub] renderer.unhandledrejection', { reason: String(e.reason) });
+  log.error('renderer.unhandledrejection', { reason: String(e.reason) });
 });
 
 const rootEl = document.getElementById('hub-root');
