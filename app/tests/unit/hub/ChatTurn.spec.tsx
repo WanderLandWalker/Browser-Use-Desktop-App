@@ -92,7 +92,7 @@ describe('ChatTurn', () => {
     };
     const { container, root } = renderTurn(turn, { isLatest: true });
 
-    const image = container.querySelector<HTMLImageElement>('.chat-step__image img');
+    const image = container.querySelector<HTMLImageElement>('.chatv2-attachment img');
     expect(image).not.toBeNull();
     expect(image?.getAttribute('src')).toBe('chatfile://files/tmp/session/screenshot.png');
     act(() => root.unmount());

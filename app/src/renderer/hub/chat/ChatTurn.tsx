@@ -10,6 +10,7 @@ import { TerminalSpinner, Elapsed } from './TerminalSpinner';
 import { useCyclingVerb } from './spinnerVerbs';
 import { formatUserMessageWithQuote, parseUserMessage } from './parseUserMessage';
 import { FinderIcon } from '@/renderer/shared/editorIcons';
+import { AttachmentList, type AttachmentItem } from '../chat-v2/Attachments';
 
 const USER_BUBBLE_CLAMP_LINES = 10;
 const USER_BUBBLE_CLAMP_CHARS = 600;
@@ -705,14 +706,45 @@ function renderAgentEntries(entries: OutputEntry[], isLive: boolean): React.Reac
 
   const out: React.ReactElement[] = [];
   let batch: OutputEntry[] = [];
+  let fileBatch: OutputEntry[] = [];
   const flush = () => {
     if (batch.length === 0) return;
     out.push(<ToolGroup key={`group-${batch[0].id}`} entries={batch} />);
     batch = [];
   };
+  // AI SDK Elements–shaped Attachments: collapse a run of consecutive
+  // non-hoisted file_output entries into a single grid instead of one
+  // FileCard per row. Single-item runs still get the same component.
+  const flushFiles = () => {
+    if (fileBatch.length === 0) return;
+    const items: AttachmentItem[] = fileBatch.map((e) => {
+      const absPath = e.tool ?? '';
+      const name = e.content || absPath.split('/').pop() || 'file';
+      const ext = name.includes('.') ? name.split('.').pop()!.toUpperCase() : '';
+      const sizeLabel = formatBytes(e.fileSize);
+      const meta = [ext, sizeLabel].filter(Boolean).join(' · ');
+      const src = e.fileMime?.startsWith('image/') && absPath
+        ? `chatfile://files${encodeURI(absPath)}`
+        : undefined;
+      return {
+        key: e.id,
+        name,
+        mime: e.fileMime,
+        meta,
+        src,
+        onClick: absPath
+          ? () => { void window.electronAPI?.sessions?.revealOutput?.(absPath)
+              .catch((err) => console.error('[Attachments] revealOutput failed', err)); }
+          : undefined,
+      };
+    });
+    out.push(<AttachmentList key={`files-${fileBatch[0].id}`} items={items} variant="grid" />);
+    fileBatch = [];
+  };
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     if (e.type === 'tool_call') {
+      flushFiles();
       batch.push(e);
       continue;
     }
@@ -732,10 +764,20 @@ function renderAgentEntries(entries: OutputEntry[], isLive: boolean): React.Reac
     // Suppress the trailing thinking and done — they get collapsed into the
     // single <StreamingProse> appended after the loop.
     if (i === proseTargetIdx) continue;
+    // Route file_outputs through Attachments. Hoisted images (those pulled
+    // into the trailing magazine layout) are already filtered above; what
+    // remains are non-hoisted files — image or otherwise — that group
+    // cleanly into the Attachments grid.
+    if (e.type === 'file_output') {
+      fileBatch.push(e);
+      continue;
+    }
+    flushFiles();
     const rendered = <AgentEntry key={e.id} entry={e} />;
     if (rendered) out.push(rendered);
   }
   flush();
+  flushFiles();
 
   if (proseTarget) {
     out.push(
