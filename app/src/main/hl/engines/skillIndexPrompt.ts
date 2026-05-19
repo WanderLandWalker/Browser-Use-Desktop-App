@@ -18,20 +18,28 @@ export const SKILL_DISCOVERY_AND_LIFECYCLE_LINES = [
 ];
 
 /**
- * Provider-neutral nudge that lets the renderer surface structured content
+ * Provider-neutral nudge that the renderer can surface structured content
  * (plans, comparisons, multi-step explanations, diffs, status reports) as
- * sandboxed HTML artifacts instead of inline markdown. The renderer
- * extracts ```html fenced blocks from the assistant's output and renders
- * them in an iframe — static HTML + CSS only, no JavaScript executes.
+ * sandboxed HTML artifacts via ```html fenced blocks. The renderer
+ * extracts them and shows them in an iframe — static HTML + CSS only, no
+ * JavaScript executes.
  *
- * Spread these lines into every engine adapter's system prompt so the
- * behavior is uniform across claude-code, codex, and browsercode/opencode.
+ * Theme is injected so the agent picks palette colors that match the
+ * current desktop app theme. The 'neobrutalist-html' interaction skill
+ * defines the visual rules (borders/shadows/palette); this constant only
+ * tells the agent the channel exists and what theme to target.
  */
-export const HTML_BLOCK_GUIDANCE_LINES = [
-  'For multi-step plans, side-by-side comparisons, structured explanations, diffs, and status reports, emit the content as a single fenced ```html block. The desktop app renders these as a sandboxed visual artifact (static HTML + CSS only — no JavaScript executes).',
-  'Keep conversational replies, tool output previews, short answers, and code samples as regular markdown. HTML blocks are for structure that benefits from layout (lists with status, two-column comparisons, tables, timelines), not for paragraphs.',
-  'When you emit an HTML block, keep it self-contained: inline styles or a <style> tag are fine; do not reference external stylesheets, scripts, or images by URL (they will not load).',
-];
+export function htmlBlockGuidanceLines(theme: 'light' | 'dark' = 'dark'): string[] {
+  return [
+    `UI THEME: ${theme}. When you emit a \`\`\`html block, choose colors that match this theme (see the 'neobrutalist-html' interaction skill for the per-theme palette).`,
+    'HTML blocks are an optional output channel — use them when layout helps the reader (plans, comparisons, status, timelines, diffs). Conversational replies, tool previews, and short answers should stay as plain markdown.',
+    'When you emit an HTML block, keep it self-contained: inline styles or a single inline <style> tag are fine; do not reference external stylesheets, scripts, fonts, or images by URL — the sandbox blocks them.',
+  ];
+}
+
+/** @deprecated kept for callers that have not yet adopted the theme-aware
+ *  function form. Returns the dark-theme variant. */
+export const HTML_BLOCK_GUIDANCE_LINES = htmlBlockGuidanceLines('dark');
 
 function normalizeSlash(value: string): string {
   return value.split(path.sep).join('/');

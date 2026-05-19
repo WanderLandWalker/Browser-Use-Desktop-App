@@ -29,6 +29,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useThemeMode } from '../../design/useThemeMode';
 import './htmlBlock.css';
 
 const MAX_HEIGHT_PX = 720;
@@ -49,6 +50,7 @@ export function HtmlBlock({ content, complete = true, tag = 'html' }: Props): Re
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [naturalHeight, setNaturalHeight] = useState<number>(FALLBACK_HEIGHT_PX);
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const { resolved: theme } = useThemeMode();
 
   const measureAndSet = useCallback(() => {
     const ifr = iframeRef.current;
@@ -129,7 +131,7 @@ export function HtmlBlock({ content, complete = true, tag = 'html' }: Props): Re
         // No `allow-scripts`. allow-same-origin is required for the
         // parent to read contentDocument.scrollHeight. See file header.
         sandbox="allow-same-origin"
-        srcDoc={wrap(content)}
+        srcDoc={wrap(content, theme)}
         onLoad={handleLoad}
         style={{ height: `${cappedHeight}px` }}
       />
@@ -165,17 +167,37 @@ export function HtmlBlock({ content, complete = true, tag = 'html' }: Props): Re
  *   - `box-sizing: border-box` globally — anything else makes the
  *     scrollHeight math fight you.
  */
-function wrap(content: string): string {
+function wrap(content: string, theme: 'light' | 'dark'): string {
+  // Baseline tokens only — used when the agent's own block doesn't set
+  // explicit colors. The agent should target the same theme via its
+  // emitted styles; these defaults make naked HTML still readable.
+  const tokens = theme === 'light'
+    ? {
+        fg: '#000',
+        bgCode: 'rgba(0, 0, 0, 0.06)',
+        link: '#1a73ff',
+        thFg: '#333',
+        rule: 'rgba(0, 0, 0, 0.1)',
+        cellRule: 'rgba(0, 0, 0, 0.12)',
+      }
+    : {
+        fg: '#e8e8e8',
+        bgCode: 'rgba(255, 255, 255, 0.06)',
+        link: '#79b8ff',
+        thFg: '#cfcfcf',
+        rule: 'rgba(255, 255, 255, 0.1)',
+        cellRule: 'rgba(255, 255, 255, 0.08)',
+      };
   return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      color: #e8e8e8;
+      color: ${tokens.fg};
       background: transparent;
       font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       padding: 12px 14px;
     }
-    a { color: #79b8ff; text-decoration: none; }
+    a { color: ${tokens.link}; text-decoration: none; }
     a:hover { text-decoration: underline; }
     h1, h2, h3, h4 { margin: 0.5em 0 0.3em; line-height: 1.25; }
     p { margin: 0 0 0.6em; }
@@ -183,15 +205,15 @@ function wrap(content: string): string {
     li { margin-bottom: 0.2em; }
     code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
     pre {
-      background: rgba(255, 255, 255, 0.06);
+      background: ${tokens.bgCode};
       padding: 8px 10px;
       border-radius: 4px;
       overflow-x: auto;
     }
     table { border-collapse: collapse; width: 100%; }
-    th, td { padding: 6px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); text-align: left; }
-    th { font-weight: 600; color: #cfcfcf; }
-    hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 12px 0; }
+    th, td { padding: 6px 10px; border-bottom: 1px solid ${tokens.cellRule}; text-align: left; }
+    th { font-weight: 600; color: ${tokens.thFg}; }
+    hr { border: 0; border-top: 1px solid ${tokens.rule}; margin: 12px 0; }
     img { max-width: 100%; height: auto; }
   </style></head><body>${content}</body></html>`;
 }
