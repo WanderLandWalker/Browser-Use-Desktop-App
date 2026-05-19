@@ -400,11 +400,9 @@ function stableMarkdown(s: string): string {
  */
 function StreamingProse({
   target,
-  hoistedImages,
   done,
 }: {
   target: string;
-  hoistedImages?: OutputEntry[];
   done: boolean;
 }): React.ReactElement {
   // If we mount with `done` already true (re-opening a finished task), skip
@@ -415,7 +413,6 @@ function StreamingProse({
   const stillStreaming = !done || !caughtUp;
   return (
     <div className={`chat-step__assistant${stillStreaming ? ' chat-step__assistant--streaming' : ''}`}>
-      {hoistedImages?.map((img) => <FloatedImage key={img.id} entry={img} />)}
       {/* Render markdown of the typewritten substring, with any unclosed
           fences temporarily closed so the parser doesn't flip the rest of the
           document into a code block as it streams in. Avoids both the
@@ -700,21 +697,15 @@ function normalizeProse(s: string): string {
 }
 
 function renderAgentEntries(entries: OutputEntry[], isLive: boolean): React.ReactElement[] {
-  // Defer ALL image file_outputs until the trailing `done` block exists, then
-  // float them inside it (magazine layout). Rendering them in-place as they
-  // stream in causes a visible jump: image lands as a standalone block during
-  // streaming, then snaps to a floated inset once `done` arrives. Better to
-  // wait — the image appears once, in its final spot.
+  // Find the trailing prose target: the last `done`, or the trailing live
+  // `thinking` if no `done` has landed yet. Both get suppressed from regular
+  // per-entry rendering and collapsed into a single <StreamingProse> at the
+  // tail, with a stable key so the typewriter cursor persists across the
+  // thinking→done swap.
   let lastDoneIdx = -1;
   for (let i = entries.length - 1; i >= 0; i--) {
     if (entries[i].type === 'done') { lastDoneIdx = i; break; }
   }
-
-  // Trailing "streaming prose": the live `thinking` that's currently growing
-  // (last entry, no `done` yet) OR the `done` entry once it lands. Both get
-  // suppressed from regular per-entry rendering and collapsed into a single
-  // <StreamingProse> at the tail, with a stable key so the typewriter cursor
-  // persists across the thinking→done swap.
   let trailingThinkingIdx = -1;
   if (lastDoneIdx === -1 && entries.length > 0 && entries[entries.length - 1].type === 'thinking') {
     trailingThinkingIdx = entries.length - 1;
@@ -728,29 +719,27 @@ function renderAgentEntries(entries: OutputEntry[], isLive: boolean): React.Reac
   // from scratch.
   const proseDone = lastDoneIdx >= 0 || !isLive;
 
-  const hoistedImages: OutputEntry[] = [];
-  const hoistedIds = new Set<string>();
-  for (const e of entries) {
-    if (e.type === 'file_output' && e.fileMime?.startsWith('image/')) {
-      if (lastDoneIdx >= 0) {
-        hoistedIds.add(e.id);
-        hoistedImages.push(e);
-      }
-    }
-  }
-
-  const out: React.ReactElement[] = [];
+  // Magazine-style float anchor. The first image file_output stays put at
+  // the position it was emitted (mid-session, when the screenshot was taken)
+  // and the rest of the turn — subsequent tool groups, thinking, and the
+  // trailing streaming prose — lives inside a `display: flow-root` wrapper
+  // so it wraps around the float. Nothing reflows when `done` lands; the
+  // prose just keeps growing alongside the same floated image.
+  const before: React.ReactElement[] = [];
+  const after: React.ReactElement[] = [];
+  let firstImage: OutputEntry | null = null;
+  let target = before;
   let batch: OutputEntry[] = [];
   let fileBatch: OutputEntry[] = [];
-  const flush = () => {
+  const flush = (): void => {
     if (batch.length === 0) return;
-    out.push(<ToolGroup key={`group-${batch[0].id}`} entries={batch} />);
+    target.push(<ToolGroup key={`group-${batch[0].id}`} entries={batch} />);
     batch = [];
   };
   // AI SDK Elements–shaped Attachments: collapse a run of consecutive
-  // non-hoisted file_output entries into a single grid instead of one
-  // FileCard per row. Single-item runs still get the same component.
-  const flushFiles = () => {
+  // file_output entries (that aren't acting as the float anchor) into one
+  // grid instead of one FileCard per row.
+  const flushFiles = (): void => {
     if (fileBatch.length === 0) return;
     const items: AttachmentItem[] = fileBatch.map((e) => {
       const absPath = e.tool ?? '';
@@ -773,7 +762,7 @@ function renderAgentEntries(entries: OutputEntry[], isLive: boolean): React.Reac
           : undefined,
       };
     });
-    out.push(<AttachmentList key={`files-${fileBatch[0].id}`} items={items} variant="grid" />);
+    target.push(<AttachmentList key={`files-${fileBatch[0].id}`} items={items} variant="grid" />);
     fileBatch = [];
   };
   for (let i = 0; i < entries.length; i++) {
@@ -794,37 +783,51 @@ function renderAgentEntries(entries: OutputEntry[], isLive: boolean): React.Reac
         continue;
       }
     }
-    // Skip file_output entries that were hoisted into the trailing done block.
-    if (hoistedIds.has(e.id)) continue;
     // Suppress the trailing thinking and done — they get collapsed into the
     // single <StreamingProse> appended after the loop.
     if (i === proseTargetIdx) continue;
-    // Route file_outputs through Attachments. Hoisted images (those pulled
-    // into the trailing magazine layout) are already filtered above; what
-    // remains are non-hoisted files — image or otherwise — that group
-    // cleanly into the Attachments grid.
+
+    // First image becomes the float anchor: switch the render target so
+    // everything after the image lives inside the float context. The image
+    // itself is rendered as the first child of the wrapper below.
+    if (
+      !firstImage
+      && e.type === 'file_output'
+      && e.fileMime?.startsWith('image/')
+      && e.tool
+    ) {
+      flushFiles();
+      firstImage = e;
+      target = after;
+      continue;
+    }
+
     if (e.type === 'file_output') {
       fileBatch.push(e);
       continue;
     }
     flushFiles();
     const rendered = <AgentEntry key={e.id} entry={e} />;
-    if (rendered) out.push(rendered);
+    if (rendered) target.push(rendered);
   }
   flush();
   flushFiles();
 
   if (proseTarget) {
-    out.push(
-      <StreamingProse
-        key="prose-tail"
-        target={proseTarget}
-        done={proseDone}
-        hoistedImages={hoistedImages}
-      />,
+    target.push(
+      <StreamingProse key="prose-tail" target={proseTarget} done={proseDone} />,
     );
   }
-  return out;
+
+  if (!firstImage) return before;
+
+  return [
+    ...before,
+    <div key="image-flow" className="chat-step__image-flow">
+      <FloatedImage entry={firstImage} />
+      {after}
+    </div>,
+  ];
 }
 
 function InflightLabel({ since }: { since: number }): React.ReactElement {
