@@ -64,6 +64,21 @@ export function htmlBlockGuidanceLines(theme: 'light' | 'dark' = 'dark'): string
  *  function form. Returns the dark-theme variant. */
 export const HTML_BLOCK_GUIDANCE_LINES = htmlBlockGuidanceLines('dark');
 
+/**
+ * Provider-neutral nudge for the `options` fenced block — the renderer
+ * surfaces it as a selectable card picker for human-in-the-loop choice
+ * during shopping / disambiguation tasks. The full schema, DOM
+ * extraction recipe, and turn-ending rule live in the `options-block`
+ * interaction skill.
+ */
+export function optionsBlockGuidanceLines(): string[] {
+  return [
+    'When you need the user to disambiguate between products or options that you can see in the live browser (e.g. shopping search results), emit a ```options fenced block carrying JSON: { prompt, multiSelect, min, max, options: [{ id, image, title, subtitle?, price?, merchant?, url? }] }. Each option requires id, image (absolute URL), and title; the rest are optional.',
+    'The `options` block ENDS YOUR TURN. After emitting it, do not call any more tools — stop and wait for the user. Their selection arrives as the next user message in the form "Selected from options: <title> (id: <id>)" so you can resume on the same browser session.',
+    'See the `options-block` interaction skill for the full schema, DOM-extraction snippet for grabbing image URLs / titles / prices from product tiles, and worked examples.',
+  ];
+}
+
 function normalizeSlash(value: string): string {
   return value.split(path.sep).join('/');
 }
