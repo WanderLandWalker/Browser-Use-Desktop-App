@@ -5,8 +5,8 @@
  * preference doesn't need encryption, and we want it readable by renderers
  * via IPC without re-prompting the OS for Keychain access).
  *
- * Consent defaults to *declined* until the user actively opts in. This matches
- * GDPR's opt-in requirement: no pre-selected "yes".
+ * Consent defaults to *enabled* (opt-out). Users can disable telemetry at any
+ * time from onboarding or Settings, and DO_NOT_TRACK=1 hard-disables it.
  */
 
 import fs from 'node:fs';
@@ -27,7 +27,7 @@ export interface ConsentState {
 }
 
 const DEFAULT_STATE: ConsentState = {
-  telemetry: false,
+  telemetry: true,
   telemetryUpdatedAt: null,
   version: CURRENT_VERSION,
 };
@@ -40,13 +40,13 @@ export function getConsent(): ConsentState {
   // Env-level override: DO_NOT_TRACK=1 hard-disables telemetry regardless of
   // the stored preference. Honors the informal web convention.
   if (process.env.DO_NOT_TRACK === '1') {
-    return { ...DEFAULT_STATE };
+    return { telemetry: false, telemetryUpdatedAt: null, version: CURRENT_VERSION };
   }
   try {
     const raw = fs.readFileSync(consentFilePath(), 'utf-8');
     const parsed = JSON.parse(raw) as Partial<ConsentState>;
     return {
-      telemetry: Boolean(parsed.telemetry),
+      telemetry: typeof parsed.telemetry === 'boolean' ? parsed.telemetry : DEFAULT_STATE.telemetry,
       telemetryUpdatedAt: parsed.telemetryUpdatedAt ?? null,
       version: parsed.version ?? CURRENT_VERSION,
     };
