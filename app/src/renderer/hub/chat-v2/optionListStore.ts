@@ -13,6 +13,7 @@
 export interface SubmissionRecord {
   selectedIds: readonly string[];
   otherText?: readonly string[];
+  otherTextByKey?: Readonly<Record<string, string>>;
 }
 
 const submissions = new Map<string, SubmissionRecord>();
@@ -33,10 +34,15 @@ export function getSubmissionRecord(key: string): SubmissionRecord | null {
   return submissions.get(key) ?? null;
 }
 
-export function recordSubmission(key: string, ids: Iterable<string>, extra?: { otherText?: readonly string[] }): void {
+export function recordSubmission(
+  key: string,
+  ids: Iterable<string>,
+  extra?: { otherText?: readonly string[]; otherTextByKey?: Readonly<Record<string, string>> },
+): void {
   submissions.set(key, {
     selectedIds: [...ids],
     otherText: extra?.otherText ? [...extra.otherText] : undefined,
+    otherTextByKey: extra?.otherTextByKey ? { ...extra.otherTextByKey } : undefined,
   });
 }
 

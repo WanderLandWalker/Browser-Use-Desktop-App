@@ -82,4 +82,51 @@ describe('AskForm', () => {
 
     act(() => second.root.unmount());
   });
+
+  it('restores submitted Other text by question when question order changes', async () => {
+    const firstPayload: AskFormPayload = {
+      questions: [
+        {
+          question: 'First need',
+          multiSelect: false,
+          allowOther: true,
+          options: [{ label: 'Preset A' }],
+        },
+        {
+          question: 'Second need',
+          multiSelect: false,
+          allowOther: true,
+          options: [{ label: 'Preset B' }],
+        },
+      ],
+    };
+    const first = renderAsk(firstPayload);
+
+    act(() => {
+      const radios = first.container.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+      radios[1]?.click();
+      radios[3]?.click();
+    });
+    const otherInputs = first.container.querySelectorAll<HTMLInputElement>('.chatv2-askform__other-input');
+    act(() => {
+      setInputValue(otherInputs[0]!, 'alpha');
+      setInputValue(otherInputs[1]!, 'beta');
+    });
+    await act(async () => {
+      first.container.querySelector<HTMLButtonElement>('.chatv2-askform__submit')?.click();
+      await Promise.resolve();
+    });
+    act(() => first.root.unmount());
+
+    const second = renderAsk({ questions: [...firstPayload.questions].reverse() });
+    const answers = Array.from(second.container.querySelectorAll('.chatv2-askform__answer'))
+      .map((node) => node.textContent ?? '');
+
+    expect(answers[0]).toContain('Second need');
+    expect(answers[0]).toContain('Other: beta');
+    expect(answers[1]).toContain('First need');
+    expect(answers[1]).toContain('Other: alpha');
+
+    act(() => second.root.unmount());
+  });
 });

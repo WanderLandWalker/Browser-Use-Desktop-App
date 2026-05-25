@@ -27,8 +27,12 @@ interface Props {
 const OTHER_TOKEN = '__other__';
 const TRAILING_SKELETONS_WHILE_STREAMING = 1;
 
-function encodeAskSelection(question: string, label: string): string {
-  return JSON.stringify([question, label]);
+function questionCacheKey(question: AskQuestion): string {
+  return JSON.stringify([question.header ?? '', question.question]);
+}
+
+function encodeAskSelection(question: AskQuestion, label: string): string {
+  return JSON.stringify([questionCacheKey(question), label]);
 }
 
 function decodeAskSelection(value: string): { question: string; label: string } | null {
@@ -106,11 +110,12 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
   const [selectedByQuestion, setSelectedByQuestion] = useState<Set<string>[]>(
     () => questions.map((q) => {
       if (!cachedRecord) return new Set();
+      const qKey = questionCacheKey(q);
       const restored = new Set<string>();
       const validLabels = new Set([...q.options.map((o) => o.label), OTHER_TOKEN]);
       for (const id of cachedRecord.selectedIds) {
         const decoded = decodeAskSelection(id);
-        if (decoded?.question === q.question && validLabels.has(decoded.label)) {
+        if ((decoded?.question === qKey || decoded?.question === q.question) && validLabels.has(decoded.label)) {
           restored.add(decoded.label);
         }
       }
@@ -118,7 +123,7 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
     }),
   );
   const [otherTextByQuestion, setOtherTextByQuestion] = useState<string[]>(
-    () => questions.map((_, i) => cachedRecord?.otherText?.[i] ?? ''),
+    () => questions.map((q) => cachedRecord?.otherTextByKey?.[questionCacheKey(q)] ?? ''),
   );
   const [submitted, setSubmitted] = useState<boolean>(cachedRecord !== null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -197,11 +202,14 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
       } else {
         // Persist enough to restore submitted view on remount.
         const flat: string[] = [];
+        const otherTextByKey: Record<string, string> = {};
         for (let i = 0; i < questions.length; i++) {
           const sel = selectedByQuestion[i] ?? new Set<string>();
-          for (const label of sel) flat.push(encodeAskSelection(questions[i].question, label));
+          const question = questions[i];
+          for (const label of sel) flat.push(encodeAskSelection(question, label));
+          otherTextByKey[questionCacheKey(question)] = otherTextByQuestion[i] ?? '';
         }
-        recordSubmission(cacheKey, flat, { otherText: otherTextByQuestion });
+        recordSubmission(cacheKey, flat, { otherTextByKey });
       }
     } catch (err) {
       setSubmitError((err as Error).message);
