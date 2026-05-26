@@ -9,17 +9,21 @@
  * "Selected: …" message that the agent reads on its next turn.
  *
  * States:
- *   - skeleton:  the fence is still streaming (or just opened) and we
- *                don't have a parsed payload yet — render shimmer cards.
- *   - error:     the closed block failed to parse — show a small
- *                explanation; the agent itself sees its own bad emission
- *                and can recover.
- *   - live:      the latest block, session is idle waiting for a pick —
- *                cards are clickable, kbd nav is wired.
- *   - history:   a block from an earlier turn that's already been
- *                answered — same visual shell but locked, with the
- *                previously-selected option highlighted (visual only;
- *                we don't replay the selection here).
+ *   - skeleton:   the fence is still streaming (or just opened) and we
+ *                 don't have a parsed payload yet — render shimmer cards.
+ *   - error:      the closed block failed to parse — show a small
+ *                 explanation; the agent itself sees its own bad emission
+ *                 and can recover.
+ *   - live:       the latest block, session is idle waiting for a pick —
+ *                 cards are clickable, Choose buttons wired.
+ *   - chosen:     user picked one of the listed options — compact receipt
+ *                 (44px thumb + "Chose: X" + site · price).
+ *   - other-chosen: user used the Other affordance.
+ *   - cancelled:  session ended before any pick — cards dim, no interaction.
+ *
+ * NOTE: If an `options-block` interaction skill doc exists in the repo,
+ * it needs updating to reflect: url required, site required (brand token
+ * only — "Amazon" not "amazon.co.uk"), allowOther defaults to false.
  *
  * Keyboard:
  *   ← →  ↑ ↓   move focus
@@ -37,12 +41,15 @@ interface Props {
   complete: boolean;
   error?: string;
   sessionId?: string;
+  /** When true, the session ended before any pick was made. Cards are
+   *  dimmed and non-interactive; a banner replaces the foot. */
+  cancelled?: boolean;
 }
 
 const SKELETON_COUNT = 3;
 
 export function OptionList(props: Props): React.ReactElement {
-  const { payload, complete, error, sessionId } = props;
+  const { payload, complete, error, sessionId, cancelled } = props;
 
   // Streaming with no options parsed yet — show a full skeleton screen.
   if (!payload) {
@@ -56,10 +63,14 @@ export function OptionList(props: Props): React.ReactElement {
     return <OptionListSkeleton />;
   }
 
-  // We have at least one parsed option. Render the picker; if the fence
-  // is still streaming, OptionListReady will tack on trailing skeleton
-  // placeholders as a "more incoming" hint.
-  return <OptionListReady payload={payload} sessionId={sessionId} streaming={!complete} />;
+  return (
+    <OptionListReady
+      payload={payload}
+      sessionId={sessionId}
+      streaming={!complete}
+      cancelled={cancelled}
+    />
+  );
 }
 
 function OptionListSkeleton(): React.ReactElement {
@@ -86,13 +97,22 @@ function OptionListSkeleton(): React.ReactElement {
 interface ReadyProps {
   payload: OptionListPayload;
   sessionId?: string;
-  /** True while the fence is still streaming — tacks on trailing skeleton
-   *  placeholders after the parsed cards so the user reads "more incoming." */
   streaming?: boolean;
+  cancelled?: boolean;
 }
 
-const TRAILING_SKELETONS_WHILE_STREAMING = 2;
 const OTHER_TOKEN = '__other__';
+
+/** Returns a Google favicon URL for a given product URL. Falls back to
+ *  undefined when the URL cannot be parsed. */
+function siteFaviconUrl(url: string): string | undefined {
+  try {
+    const { hostname } = new URL(url);
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
+  } catch {
+    return undefined;
+  }
+}
 
 function canSubmitSelection(
   sections: OptionListSection[],
@@ -109,13 +129,27 @@ function canSubmitSelection(
   });
 }
 
-function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.ReactElement {
+/** Subtitle rendered under the section's source line when multi-select is
+ *  enabled. Tells the user upfront how many they can pick + tracks the
+ *  running count as they Add cards. */
+function multiSelectHint(sec: OptionListSection, picked: number): string {
+  const total = sec.options.length;
+  let prefix: string;
+  if (sec.min === sec.max && sec.min > 0) prefix = `Pick exactly ${sec.min}`;
+  else if (sec.min > 0 && sec.max < total) prefix = `Pick ${sec.min}–${sec.max}`;
+  else if (sec.min > 0) prefix = `Pick at least ${sec.min}`;
+  else prefix = `Pick any`;
+  const count = picked > 0 ? ` · ${picked} added` : '';
+  return `${prefix}${count}`;
+}
+
+function OptionListReady({ payload, sessionId, streaming, cancelled }: ReadyProps): React.ReactElement {
   const { sections, prompt } = payload;
   const multi = sections.length > 1;
 
   // Effective field schema per section: agent-declared (preserves intent
   // + order), else the union of every option's field keys in first-seen
-  // order across that section. Missing values in a card render as "—".
+  // order across that section. Missing fields are simply omitted per card.
   const effectiveSchemas = useMemo<string[][]>(() => sections.map((sec) => {
     if (sec.fieldSchema && sec.fieldSchema.length > 0) return sec.fieldSchema;
     const seen: string[] = [];
@@ -128,9 +162,15 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
     return seen;
   }), [sections]);
 
-  // Stable cache key — covers ChatTurn unmounts on tab switch. Combines
-  // ids across every section so picker emissions with the same option
-  // sets resolve to the same key regardless of section order.
+  // Per-section: detect whether all cards share the same site so we can
+  // hoist a single source attribution line into the section head.
+  const sectionSingleSite = useMemo<(string | null)[]>(() => sections.map((sec) => {
+    if (sec.options.length === 0) return null;
+    const first = sec.options[0].site;
+    return sec.options.every((o) => o.site === first) ? first : null;
+  }), [sections]);
+
+  // Stable cache key — covers ChatTurn unmounts on tab switch.
   const cacheKey = useMemo(() => {
     const allIds: string[] = [];
     for (const sec of sections) for (const o of sec.options) allIds.push(o.id);
@@ -139,28 +179,23 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
   const cachedSelection = useMemo(() => getSubmission(cacheKey), [cacheKey]);
   const cachedRecord = useMemo(() => getSubmissionRecord(cacheKey), [cacheKey]);
 
-  // Per-section selected ids. We track one Set per section index.
-  // The Set may also contain OTHER_TOKEN when the user picks "Other".
+  // Per-section selected ids.
   const [selectedBySection, setSelectedBySection] = useState<Set<string>[]>(
     () => sections.map((sec) => {
       if (!cachedSelection) return new Set<string>();
-      // Restore: keep ids from this section + the Other token.
       const valid = new Set([...sec.options.map((o) => o.id), OTHER_TOKEN]);
       return new Set([...cachedSelection].filter((id) => valid.has(id)));
     }),
   );
-  // Per-section free-text answer when the user picks the "Other" card.
   const [otherTextBySection, setOtherTextBySection] = useState<string[]>(
     () => sections.map((_, i) => cachedRecord?.otherText?.[i] ?? ''),
   );
-  // Cursor lives at (section, option). Arrow keys cycle within a section.
   const [cursor, setCursor] = useState<{ section: number; option: number }>({ section: 0, option: 0 });
   const [submitted, setSubmitted] = useState<boolean>(cachedSelection !== null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const gridRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const otherInputRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
-  const locked = submitted;
+  const locked = submitted || (cancelled ?? false);
 
   const toggle = useCallback((sectionIdx: number, optionIdx: number): void => {
     const sec = sections[sectionIdx];
@@ -181,8 +216,6 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
     });
   }, [sections]);
 
-  // canSubmit: every section meets its bounds AND any section that
-  // has the Other card selected has non-empty typed text.
   const canSubmit = useMemo(() => {
     return canSubmitSelection(sections, selectedBySection, otherTextBySection);
   }, [sections, selectedBySection, otherTextBySection]);
@@ -191,45 +224,6 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
     () => selectedBySection.reduce((sum, s) => sum + s.size, 0),
     [selectedBySection],
   );
-
-  const submitLabel = useMemo(() => {
-    if (submitted) return totalSelected === 1 ? 'Sent to agent' : `Sent ${totalSelected} items`;
-    if (multi) {
-      if (canSubmit) return `Confirm ${totalSelected} pick${totalSelected === 1 ? '' : 's'}`;
-      const missingOther = sections.findIndex((_, i) => {
-        const sel = selectedBySection[i] ?? new Set<string>();
-        return sel.has(OTHER_TOKEN) && (otherTextBySection[i] ?? '').trim().length === 0;
-      });
-      if (missingOther >= 0) return 'Type your "Other" answer';
-      // Find the first section that's not satisfied, hint at it.
-      const idx = sections.findIndex((sec, i) => {
-        const n = selectedBySection[i]?.size ?? 0;
-        return sec.multiSelect ? (n < sec.min || n > sec.max) : (n !== 1);
-      });
-      if (idx < 0) return 'Pick options to continue';
-      const sec = sections[idx];
-      const label = sec?.label || `section ${idx + 1}`;
-      return `Pick from "${label}" to continue`;
-    }
-    // Single-section: keep the old one-line label.
-    const sec = sections[0];
-    const sel = selectedBySection[0] ?? new Set<string>();
-    const n = sel.size;
-    if (sel.has(OTHER_TOKEN) && (otherTextBySection[0] ?? '').trim().length === 0) {
-      return 'Type your "Other" answer';
-    }
-    if (sec.multiSelect) {
-      if (n === 0) return sec.min > 1 ? `Pick at least ${sec.min}` : 'Pick options to continue';
-      if (n < sec.min) return `${sec.min - n} more to continue`;
-      return `Confirm ${n} item${n > 1 ? 's' : ''}`;
-    }
-    if (n === 1) {
-      const title = sec.options.find((o) => sel.has(o.id))?.title ?? '';
-      const truncated = title.length > 32 ? `${title.slice(0, 31)}…` : title;
-      return `Confirm "${truncated}"`;
-    }
-    return 'Pick one to continue';
-  }, [sections, selectedBySection, otherTextBySection, canSubmit, multi, totalSelected, submitted]);
 
   const submit = useCallback(async (selectionOverride?: Set<string>[]): Promise<void> => {
     const selected = selectionOverride ?? selectedBySection;
@@ -264,6 +258,25 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
       setSubmitted(false);
     }
   }, [locked, sessionId, sections, selectedBySection, otherTextBySection, cacheKey]);
+
+  // Per-card choose handler for single-select: pick + submit immediately.
+  const chooseCard = useCallback((sectionIdx: number, optionIdx: number): void => {
+    if (locked) return;
+    const sec = sections[sectionIdx];
+    if (!sec?.options[optionIdx]) return;
+    if (!sec.multiSelect) {
+      // Single-select: set selection and submit immediately.
+      const opt = sec.options[optionIdx];
+      const next = selectedBySection.map((set, idx) => (
+        idx === sectionIdx ? new Set<string>([opt.id]) : new Set(set)
+      ));
+      setSelectedBySection(next);
+      void submit(next);
+    } else {
+      // Multi-select: just toggle; foot Confirm aggregates.
+      toggle(sectionIdx, optionIdx);
+    }
+  }, [locked, sections, selectedBySection, submit, toggle]);
 
   const handleSectionKey = useCallback((sectionIdx: number, e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (locked) return;
@@ -307,15 +320,14 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
     }
   }, [locked, sections, cursor, multi, canSubmit, selectedBySection, submit, toggle]);
 
-  // Auto-focus the first section's grid on mount so kbd nav works
-  // without an initial click.
+  // Auto-focus the first section's grid on mount.
   useEffect(() => {
-    if (!submitted && gridRefs.current[0]) {
+    if (!submitted && !cancelled && gridRefs.current[0]) {
       gridRefs.current[0].focus({ preventScroll: true });
     }
-  }, [submitted]);
+  }, [submitted, cancelled]);
 
-  // Post-submit: compact "Chose: …" view across every section.
+  // Post-submit: compact receipt view.
   if (submitted) {
     return (
       <div
@@ -324,12 +336,6 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
         data-state="chosen"
         data-multi={multi}
       >
-        <div className="chatv2-optlist__head">
-          <div className="chatv2-optlist__prompt">
-            {multi ? 'Chose:' : `Chose: ${formatChosenSummary(sections, selectedBySection, otherTextBySection)}`}
-          </div>
-          <div className="chatv2-optlist__meta">sent to agent</div>
-        </div>
         {sections.map((sec, sIdx) => {
           const sel = selectedBySection[sIdx] ?? new Set<string>();
           const chosen = sec.options.filter((o) => sel.has(o.id));
@@ -340,39 +346,86 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
               {(multi && sec.label) && (
                 <div className="chatv2-optlist__section-label">{sec.label}</div>
               )}
-              <div className="chatv2-optlist__grid" aria-hidden="false">
-                {chosen.map((opt) => (
-                  <OptionCard
-                    key={opt.id}
-                    opt={opt}
-                    fieldSchema={effectiveSchemas[sIdx] ?? []}
-                    selected
-                    focused={false}
-                    disabled
-                    onClick={() => { /* locked */ }}
-                    onHover={() => { /* locked */ }}
-                  />
-                ))}
-                {otherPicked && (
-                  <div className="chatv2-optlist__card chatv2-optlist__card--other" data-selected="true">
-                    <div className="chatv2-optlist__panel chatv2-optlist__panel--other">
-                      <span className="chatv2-optlist__other-glyph" aria-hidden="true">+</span>
-                    </div>
-                    <div className="chatv2-optlist__body">
-                      <div className="chatv2-optlist__title">Other</div>
-                      {(otherTextBySection[sIdx] ?? '').trim() && (
-                        <p className="chatv2-optlist__desc">{otherTextBySection[sIdx]}</p>
-                      )}
-                    </div>
+              {chosen.map((opt) => (
+                <ChosenReceipt key={opt.id} opt={opt} />
+              ))}
+              {otherPicked && (
+                <div className="chatv2-optlist__chosen-receipt chatv2-optlist__chosen-receipt--other">
+                  <div className="chatv2-optlist__chosen-thumb chatv2-optlist__chosen-thumb--other">
+                    <span aria-hidden="true">✎</span>
                   </div>
-                )}
-              </div>
+                  <div className="chatv2-optlist__chosen-text">
+                    <div className="chatv2-optlist__chosen-label">Chose: Other</div>
+                    {(otherTextBySection[sIdx] ?? '').trim() && (
+                      <div className="chatv2-optlist__chosen-meta">{otherTextBySection[sIdx]}</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
     );
   }
+
+  // Cancelled state — session ended before pick.
+  if (cancelled) {
+    return (
+      <div
+        className="chatv2-optlist chatv2-optlist--cancelled"
+        data-testid="chatv2-optlist"
+        data-state="cancelled"
+      >
+        <div className="chatv2-optlist__head">
+          {prompt && <div className="chatv2-optlist__prompt">{prompt}</div>}
+        </div>
+        {sections.map((sec, sIdx) => (
+          <div key={sIdx} className="chatv2-optlist__section">
+            {multi && sec.label && (
+              <div className="chatv2-optlist__section-label">{sec.label}</div>
+            )}
+            <div className="chatv2-optlist__grid" aria-hidden="true">
+              {sec.options.map((opt) => (
+                <OptionCard
+                  key={opt.id}
+                  opt={opt}
+                  fieldSchema={effectiveSchemas[sIdx] ?? []}
+                  selected={false}
+                  focused={false}
+                  disabled
+                  isConfirmed={false}
+                  multiSelect={sec.multiSelect}
+                  onClick={() => { /* cancelled */ }}
+                  onHover={() => { /* cancelled */ }}
+                  onChoose={() => { /* cancelled */ }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="chatv2-optlist__cancelled-banner">Session ended — no choice made.</div>
+      </div>
+    );
+  }
+
+  // Live state.
+  const submitLabel = (() => {
+    if (canSubmit) return `Confirm ${totalSelected} pick${totalSelected === 1 ? '' : 's'}`;
+    const missingOther = sections.findIndex((_, i) => {
+      const sel = selectedBySection[i] ?? new Set<string>();
+      return sel.has(OTHER_TOKEN) && (otherTextBySection[i] ?? '').trim().length === 0;
+    });
+    if (missingOther >= 0) return 'Type your "Other" answer';
+    const idx = sections.findIndex((sec, i) => {
+      const n = selectedBySection[i]?.size ?? 0;
+      return sec.multiSelect ? (n < sec.min || n > sec.max) : (n !== 1);
+    });
+    if (idx < 0) return 'Pick options to continue';
+    const sec = sections[idx];
+    const label = sec?.label || `section ${idx + 1}`;
+    return `Pick from "${label}" to continue`;
+  })();
 
   return (
     <div
@@ -383,181 +436,185 @@ function OptionListReady({ payload, sessionId, streaming }: ReadyProps): React.R
     >
       <div className="chatv2-optlist__head">
         {prompt && <div className="chatv2-optlist__prompt">{prompt}</div>}
-        <div className="chatv2-optlist__meta">
-          {multi
-            ? `${sections.length} sections · ${totalSelected} picked${streaming ? ' · loading more…' : ''}`
-            : (() => {
-                const sec = sections[0];
-                let s = `${sec.options.length} option${sec.options.length === 1 ? '' : 's'}`;
-                if (streaming) s += ' · loading more…';
-                if (sec.multiSelect && sec.min === sec.max) s += ` · pick exactly ${sec.min}`;
-                if (sec.multiSelect && sec.min !== sec.max) s += ` · pick ${sec.min}–${sec.max}`;
-                return s;
-              })()}
-        </div>
       </div>
 
       {sections.map((sec, sIdx) => {
         const sel = selectedBySection[sIdx] ?? new Set<string>();
-        const isLastSection = sIdx === sections.length - 1;
+        const sharedSite = sectionSingleSite[sIdx];
+        const siteIconUrl = sharedSite && sec.options[0]?.url
+          ? siteFaviconUrl(sec.options[0].url)
+          : undefined;
+
         return (
           <div key={sIdx} className="chatv2-optlist__section">
-            {multi && (
-              <div className="chatv2-optlist__section-head">
-                {sec.label && <div className="chatv2-optlist__section-label">{sec.label}</div>}
-                <div className="chatv2-optlist__section-meta">
-                  {sec.options.length} option{sec.options.length === 1 ? '' : 's'}
-                  {sec.multiSelect && sec.min === sec.max && ` · pick exactly ${sec.min}`}
-                  {sec.multiSelect && sec.min !== sec.max && ` · pick ${sec.min}–${sec.max}`}
-                  {!sec.multiSelect && ' · pick one'}
+            <div className="chatv2-optlist__section-head">
+              {multi && sec.label && (
+                <div className="chatv2-optlist__section-label">{sec.label}</div>
+              )}
+              {sharedSite && (
+                <div className="chatv2-optlist__source">
+                  {siteIconUrl && (
+                    <img
+                      className="chatv2-optlist__source-icon"
+                      src={siteIconUrl}
+                      alt=""
+                      width={14}
+                      height={14}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  <span className="chatv2-optlist__source-label">Results from <b className="chatv2-optlist__source-name">{sharedSite}</b></span>
                 </div>
-              </div>
-            )}
+              )}
+              {sec.multiSelect && (
+                <div className="chatv2-optlist__multi-hint">
+                  {multiSelectHint(sec, sel.size)}
+                </div>
+              )}
+              {streaming && (
+                <div className="chatv2-optlist__streaming-hint">
+                  scraping {sharedSite ?? 'results'}…
+                </div>
+              )}
+            </div>
+
             <div
               ref={(el) => { gridRefs.current[sIdx] = el; }}
               className="chatv2-optlist__grid"
               tabIndex={locked ? -1 : 0}
               onKeyDown={(e) => handleSectionKey(sIdx, e)}
             >
-              {sec.options.map((opt, idx) => (
-                <OptionCard
-                  key={opt.id}
-                  opt={opt}
-                  fieldSchema={effectiveSchemas[sIdx] ?? []}
-                  selected={sel.has(opt.id)}
-                  focused={!locked && cursor.section === sIdx && cursor.option === idx}
-                  disabled={locked}
-                  onClick={() => {
-                    if (locked) return;
-                    setCursor({ section: sIdx, option: idx });
-                    toggle(sIdx, idx);
-                    gridRefs.current[sIdx]?.focus({ preventScroll: true });
-                  }}
-                  onHover={() => { if (!locked) setCursor({ section: sIdx, option: idx }); }}
-                />
-              ))}
-              {sec.allowOther && (
-                <OtherCard
-                  selected={sel.has(OTHER_TOKEN)}
-                  text={otherTextBySection[sIdx] ?? ''}
-                  disabled={locked}
-                  inputRef={(el) => { otherInputRefs.current[sIdx] = el; }}
-                  onPick={() => {
-                    if (locked) return;
-                    setSelectedBySection((prev) => {
-                      const next = prev.slice();
-                      const set = new Set(prev[sIdx]);
-                      if (sec.multiSelect) {
-                        if (set.has(OTHER_TOKEN)) set.delete(OTHER_TOKEN);
-                        else if (set.size < sec.max) set.add(OTHER_TOKEN);
-                      } else {
-                        set.clear();
-                        set.add(OTHER_TOKEN);
-                      }
-                      next[sIdx] = set;
-                      return next;
-                    });
-                    // Auto-focus the text input on first pick so the user
-                    // can type immediately without an extra click.
-                    setTimeout(() => otherInputRefs.current[sIdx]?.focus(), 0);
-                  }}
-                  onTextChange={(text) => {
-                    setOtherTextBySection((prev) => {
-                      const next = prev.slice();
-                      next[sIdx] = text;
-                      return next;
-                    });
-                    // Typing implies picking the Other card.
-                    if (!sel.has(OTHER_TOKEN)) {
-                      setSelectedBySection((prev) => {
-                        const next = prev.slice();
-                        const set = new Set(prev[sIdx]);
-                        if (sec.multiSelect && set.size < sec.max) set.add(OTHER_TOKEN);
-                        else if (!sec.multiSelect) { set.clear(); set.add(OTHER_TOKEN); }
-                        next[sIdx] = set;
-                        return next;
-                      });
-                    }
-                  }}
-                />
-              )}
-              {streaming && isLastSection && Array.from({ length: TRAILING_SKELETONS_WHILE_STREAMING }).map((_, i) => (
-                <div key={`skel-${i}`} className="chatv2-optlist__skel-card" aria-hidden="true">
-                  <div className="chatv2-optlist__skel-panel" />
-                  <div className="chatv2-optlist__skel-body">
-                    <div className="chatv2-optlist__skel-line chatv2-optlist__skel-line--med" />
-                    <div className="chatv2-optlist__skel-line chatv2-optlist__skel-line--short" />
-                  </div>
-                </div>
-              ))}
+              {sec.options.map((opt, idx) => {
+                const isConfirmed = sel.has(opt.id);
+                return (
+                  <OptionCard
+                    key={opt.id}
+                    opt={opt}
+                    fieldSchema={effectiveSchemas[sIdx] ?? []}
+                    selected={isConfirmed}
+                    focused={!locked && cursor.section === sIdx && cursor.option === idx}
+                    disabled={locked}
+                    isConfirmed={isConfirmed}
+                    multiSelect={sec.multiSelect}
+                    showPerCardFavicon={!sharedSite}
+                    onClick={() => {
+                      if (locked) return;
+                      setCursor({ section: sIdx, option: idx });
+                      toggle(sIdx, idx);
+                      gridRefs.current[sIdx]?.focus({ preventScroll: true });
+                    }}
+                    onHover={() => { if (!locked) setCursor({ section: sIdx, option: idx }); }}
+                    onChoose={() => chooseCard(sIdx, idx)}
+                  />
+                );
+              })}
             </div>
+
+            {sec.allowOther && (
+              <OtherLink
+                disabled={locked}
+                onClick={() => {
+                  // Focus the chat input so the user can type their custom answer.
+                  // Try the window event first (Electron bridge); fall back to DOM query.
+                  try {
+                    window.dispatchEvent(new CustomEvent('chatv2:focus-input'));
+                  } catch {
+                    // ignore
+                  }
+                  const input = document.querySelector<HTMLElement>('[data-chat-input]');
+                  input?.focus();
+                }}
+              />
+            )}
           </div>
         );
       })}
 
-      <div className="chatv2-optlist__foot">
-        <button
-          type="button"
-          className="chatv2-optlist__submit"
-          disabled={!canSubmit || locked}
-          onClick={() => { void submit(); }}
-        >
-          {submitLabel}
-        </button>
-        {submitError ? (
-          <span className="chatv2-optlist__hint" style={{ color: '#ff7a7a' }}>{submitError}</span>
+      {/* Foot Confirm — only for multi-select sections, and only once the
+          user has picked enough to actually submit. The disabled placeholder
+          ("Pick from … to continue") is visual noise — better to show nothing
+          until there's a real action to take. */}
+      {sections.some((sec) => sec.multiSelect) && canSubmit && !locked && (
+        <div className="chatv2-optlist__foot">
+          <button
+            type="button"
+            className="chatv2-optlist__submit"
+            onClick={() => { void submit(); }}
+          >
+            {submitLabel}
+          </button>
+        </div>
+      )}
+      {/* Show submit error in its own foot when present, regardless of mode. */}
+      {submitError && (
+        <div className="chatv2-optlist__foot">
+          <span className="chatv2-optlist__submit-error">{submitError}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function ChosenReceipt({ opt }: { opt: OptionItem }): React.ReactElement {
+  const [imgBroken, setImgBroken] = useState(false);
+  const priceField = opt.fields?.Price ?? opt.fields?.price;
+  const meta = [opt.site, priceField].filter(Boolean).join(' · ');
+
+  return (
+    <div className="chatv2-optlist__chosen-receipt">
+      <div className="chatv2-optlist__chosen-thumb">
+        {!imgBroken ? (
+          <img
+            src={opt.image}
+            alt=""
+            className="chatv2-optlist__chosen-img"
+            onError={() => setImgBroken(true)}
+          />
         ) : (
-          <span className="chatv2-optlist__hint">
-            <span className="chatv2-optlist__kbd">←</span>
-            <span className="chatv2-optlist__kbd">→</span>navigate ·
-            <span className="chatv2-optlist__kbd">↵</span>confirm
-          </span>
+          <span className="chatv2-optlist__chosen-thumb-broken" aria-hidden="true">🖼</span>
         )}
+      </div>
+      <div className="chatv2-optlist__chosen-text">
+        <div className="chatv2-optlist__chosen-label">Chose: {opt.title}</div>
+        {meta && <div className="chatv2-optlist__chosen-meta">{meta}</div>}
       </div>
     </div>
   );
 }
 
-function formatChosenSummary(
-  sections: OptionListSection[],
-  selectedBySection: Set<string>[],
-  otherTextBySection: string[],
-): string {
-  const titles: string[] = [];
-  sections.forEach((sec, i) => {
-    const sel = selectedBySection[i] ?? new Set<string>();
-    for (const opt of sec.options) if (sel.has(opt.id)) titles.push(opt.title);
-    if (sel.has(OTHER_TOKEN)) {
-      const text = (otherTextBySection[i] ?? '').trim();
-      titles.push(text ? `Other: ${text}` : 'Other');
-    }
-  });
-  return titles.join(', ');
-}
-
 interface CardProps {
   opt: OptionItem;
-  /** Field labels to render in order across every card; cells missing
-   *  the corresponding value render as "—" to keep alignment. */
   fieldSchema: string[];
   selected: boolean;
   focused: boolean;
   disabled: boolean;
+  isConfirmed: boolean;
+  /** Multi-select mode: button reads "Add"/"Added", stays clickable to toggle off. */
+  multiSelect: boolean;
+  showPerCardFavicon?: boolean;
   onClick: () => void;
   onHover: () => void;
+  onChoose: () => void;
 }
 
-const MISSING_FIELD_GLYPH = '—';
-
-function OptionCard({ opt, fieldSchema, selected, focused, disabled, onClick, onHover }: CardProps): React.ReactElement {
+function OptionCard({
+  opt, fieldSchema, selected, focused, disabled, isConfirmed, multiSelect,
+  showPerCardFavicon, onClick, onHover, onChoose,
+}: CardProps): React.ReactElement {
   const [broken, setBroken] = useState<boolean>(false);
+  const [faviconBroken, setFaviconBroken] = useState<boolean>(false);
+
+  const faviconSrc = showPerCardFavicon ? siteFaviconUrl(opt.url) : undefined;
+
   return (
-    <button
-      type="button"
+    <div
       className="chatv2-optlist__card"
       data-selected={selected}
       data-focused={focused}
-      disabled={disabled}
       onClick={onClick}
       onMouseEnter={onHover}
     >
@@ -571,105 +628,132 @@ function OptionCard({ opt, fieldSchema, selected, focused, disabled, onClick, on
             onError={() => setBroken(true)}
           />
         ) : (
-          <div className="chatv2-optlist__img chatv2-optlist__img--broken">no image</div>
+          <div className="chatv2-optlist__img chatv2-optlist__img--broken" />
         )}
         <span className="chatv2-optlist__pin" aria-hidden="true">✓</span>
       </div>
       <div className="chatv2-optlist__body">
-        <div className="chatv2-optlist__title">{opt.title}</div>
+        <div className="chatv2-optlist__title-row">
+          {faviconSrc && !faviconBroken && (
+            <img
+              className="chatv2-optlist__card-favicon"
+              src={faviconSrc}
+              alt=""
+              width={12}
+              height={12}
+              onError={() => setFaviconBroken(true)}
+            />
+          )}
+          <div className="chatv2-optlist__title">{opt.title}</div>
+        </div>
         {opt.description && <p className="chatv2-optlist__desc">{opt.description}</p>}
-        {fieldSchema.length > 0 && (
+        {(fieldSchema.length > 0 || opt.url) && (
           <dl className="chatv2-optlist__fields">
             {fieldSchema.map((label) => {
               const value = opt.fields?.[label];
+              if (value === undefined) return null;
               return (
                 <div key={label} className="chatv2-optlist__field">
                   <dt className="chatv2-optlist__field-label">{label}</dt>
-                  <dd className="chatv2-optlist__field-value" data-missing={!value}>
-                    {value ?? MISSING_FIELD_GLYPH}
-                  </dd>
+                  <dd className="chatv2-optlist__field-value">{value}</dd>
                 </div>
               );
             })}
+            {/* Source row — content-level "View on X" link. Peer to Price,
+                not a competing action button. Click opens the listing in
+                the user's default browser. */}
+            <div className="chatv2-optlist__field">
+              <dt className="chatv2-optlist__field-label">Source</dt>
+              <dd className="chatv2-optlist__field-value">
+                <a
+                  className="chatv2-optlist__source-link"
+                  href={opt.url}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try { window.electronAPI?.shell?.openExternal?.(opt.url); } catch { /* ignore */ }
+                  }}
+                >
+                  {!faviconBroken && (
+                    <img
+                      className="chatv2-optlist__source-link-favicon"
+                      src={siteFaviconUrl(opt.url)}
+                      alt=""
+                      width={13}
+                      height={13}
+                      onError={() => setFaviconBroken(true)}
+                    />
+                  )}
+                  View on {opt.site}
+                  <svg
+                    className="chatv2-optlist__source-link-arrow"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M7 17 L17 7 M9 7 H17 V15" />
+                  </svg>
+                </a>
+              </dd>
+            </div>
           </dl>
         )}
-      </div>
-    </button>
-  );
-}
-
-interface OtherCardProps {
-  selected: boolean;
-  text: string;
-  disabled: boolean;
-  inputRef: (el: HTMLTextAreaElement | null) => void;
-  onPick: () => void;
-  onTextChange: (text: string) => void;
-}
-
-/**
- * The "Other — describe…" card appended to every section grid (unless
- * `allowOther: false`). No image, dashed border, transforms to a text
- * input affordance on pick. Lets the user write a custom answer the
- * agent didn't list.
- */
-function OtherCard({ selected, text, disabled, inputRef, onPick, onTextChange }: OtherCardProps): React.ReactElement {
-  return (
-    <div
-      className="chatv2-optlist__card chatv2-optlist__card--other"
-      data-selected={selected}
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-disabled={disabled}
-      onClick={(e) => {
-        if (disabled) return;
-        // Clicks on the textarea shouldn't re-pick (let the input own its
-        // own focus/typing); only outer-card clicks pick.
-        if (e.target instanceof HTMLTextAreaElement) return;
-        onPick();
-      }}
-      onKeyDown={(e) => {
-        if (disabled) return;
-        // Only treat Enter/Space as "pick" when the textarea isn't focused
-        // — otherwise the user can't type newlines / spaces in their answer.
-        if (e.target instanceof HTMLTextAreaElement) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onPick();
-        }
-      }}
-    >
-      <div className="chatv2-optlist__panel chatv2-optlist__panel--other">
-        <span className="chatv2-optlist__other-glyph" aria-hidden="true">+</span>
-        <span className="chatv2-optlist__other-label">Describe what you want</span>
-      </div>
-      <div className="chatv2-optlist__body chatv2-optlist__body--other">
-        <textarea
-          ref={inputRef}
-          className="chatv2-optlist__other-input"
-          placeholder="Type your answer…"
-          value={text}
-          disabled={disabled}
-          rows={3}
-          onChange={(e) => onTextChange(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-        />
+        <div className="chatv2-optlist__actions">
+          <button
+            type="button"
+            className={`chatv2-optlist__choose${isConfirmed ? ' is-confirmed' : ''}`}
+            // Single-select locks after confirm (irreversible). Multi-select
+            // stays clickable so the user can un-toggle a pick.
+            disabled={disabled || (isConfirmed && !multiSelect)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onChoose();
+            }}
+            aria-pressed={isConfirmed}
+          >
+            <span className="chatv2-optlist__choose-label">{multiSelect ? 'Add' : 'Choose'}</span>
+            <span className="chatv2-optlist__choose-confirm">
+              <svg
+                className="chatv2-optlist__choose-check"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M5 12 L10 17 L19 7" />
+              </svg>
+              <span>{multiSelect ? 'Added' : 'Chosen'}</span>
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/**
- * Build the structured user message that resumes the agent's turn.
- * Single-section single-pick → one-liner. Multi-section or multi-pick
- * → bulleted list. Multi-section lines are prefixed with the section
- * label so the agent can route picks back to categories.
- */
+function OtherLink({ disabled, onClick }: { disabled: boolean; onClick: () => void }): React.ReactElement {
+  return (
+    <button
+      type="button"
+      className="chatv2-optlist__other-link"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      none of these? describe what you want
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function formatSelectionMessage(pickedAcross: { section: OptionListSection; picked: OptionItem[]; otherText: string }[]): string {
   const totalCount = pickedAcross.reduce((n, { picked, otherText }) => n + picked.length + (otherText ? 1 : 0), 0);
   if (totalCount === 0) return 'Selected: (none)';
 
-  // Single section, single pick → terse one-liner.
   const totalSections = pickedAcross.length;
   if (totalSections === 1 && totalCount === 1) {
     const sec = pickedAcross[0];
@@ -680,9 +764,6 @@ function formatSelectionMessage(pickedAcross: { section: OptionListSection; pick
     return `Selected from options: Other: ${sec.otherText}`;
   }
 
-  // Otherwise bulleted. Prefix with section label when there's more than
-  // one section so the agent can route picks back to categories. Other
-  // picks render as `Other: <typed text>` on their own line.
   const lines: string[] = [];
   for (const { section, picked, otherText } of pickedAcross) {
     const prefix = totalSections > 1 && section.label ? `${section.label}: ` : '';
