@@ -221,19 +221,21 @@ function OptionListReady({ payload, sessionId, streaming, cancelled, nextUserTex
   // Tracks "user clicked submit in this mount" vs "bootstrapped from
   // cache". Only a local submit makes our state authoritative — a cache
   // bootstrap is just a hint and should yield to a later-arriving
-  // transcript, which is the durable source of truth.
-  const localSubmitRef = useRef<boolean>(false);
+  // transcript, which is the durable source of truth. State (not a ref)
+  // so toggling it back after a failed submit re-runs the hydration
+  // effect to pick up any transcript that was already waiting.
+  const [localSubmit, setLocalSubmit] = useState<boolean>(false);
 
   // Late-arriving transcript: if nextUserText hydrates after first paint
   // (streaming restore / async transcript fetch), apply the derived
   // submission. Skip only when the user has submitted locally in this
   // mount — bootstrap-from-cache must not block transcript hydration.
   useEffect(() => {
-    if (!transcriptSubmission || localSubmitRef.current) return;
+    if (!transcriptSubmission || localSubmit) return;
     setSelectedBySection(sections.map((_, i) => new Set(transcriptSubmission.selection[i])));
     setOtherTextBySection(transcriptSubmission.otherText.slice());
     setSubmitted(true);
-  }, [transcriptSubmission, sections]);
+  }, [transcriptSubmission, localSubmit, sections]);
 
   const locked = submitted || (cancelled ?? false);
 
@@ -278,7 +280,7 @@ function OptionListReady({ payload, sessionId, streaming, cancelled, nextUserTex
       return { section: sec, picked: sec.options.filter((o) => ids.has(o.id)), otherText };
     });
     const message = formatSelectionMessage(pickedAcross);
-    localSubmitRef.current = true;
+    setLocalSubmit(true);
     setSubmitted(true);
     setSubmitError(null);
     try {
@@ -286,7 +288,7 @@ function OptionListReady({ payload, sessionId, streaming, cancelled, nextUserTex
       if (result?.error) {
         setSubmitError(result.error);
         setSubmitted(false);
-        localSubmitRef.current = false;
+        setLocalSubmit(false);
       } else {
         const flat: string[] = [];
         for (let i = 0; i < sections.length; i++) {
@@ -298,7 +300,7 @@ function OptionListReady({ payload, sessionId, streaming, cancelled, nextUserTex
     } catch (err) {
       setSubmitError((err as Error).message);
       setSubmitted(false);
-      localSubmitRef.current = false;
+      setLocalSubmit(false);
     }
   }, [locked, sessionId, sections, selectedBySection, otherTextBySection, cacheKey]);
 
