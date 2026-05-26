@@ -555,6 +555,12 @@ function validateOption(raw: unknown): OptionItem | null {
   const site = typeof o.site === 'string' ? o.site.trim() : '';
   // url and site are now required — drop options that omit either.
   if (!id || !image || !title || !url || !site) return null;
+  // url must be an absolute http(s) URL — both because shell.openExternal
+  // rejects anything else, and because relative/`javascript:`/data URLs from
+  // a model-emitted block shouldn't be navigated to. image must be remote
+  // too since it goes into an <img src> on a renderer that has no concept
+  // of the agent's working directory.
+  if (!isAbsoluteHttpUrl(url) || !isAbsoluteHttpUrl(image)) return null;
   if (isLikelyDecorativeOptionImage(image)) return null;
 
   // Coerce the agent-supplied `fields` map into a clean string→string record.
@@ -585,6 +591,15 @@ function validateOption(raw: unknown): OptionItem | null {
     url,
     site,
   };
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function isLikelyDecorativeOptionImage(imageUrl: string): boolean {
