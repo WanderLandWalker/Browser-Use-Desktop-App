@@ -729,9 +729,11 @@ function OptionCard({
           <button
             type="button"
             className={`chatv2-optlist__choose${isConfirmed ? ' is-confirmed' : ''}`}
-            // Single-select locks after confirm (irreversible). Multi-select
-            // stays clickable so the user can un-toggle a pick.
-            disabled={disabled || (isConfirmed && !multiSelect)}
+            // Only the parent-level `disabled` (= picker locked after submit)
+            // should block clicks. Single-select selection is transient until
+            // submit runs; selecting a card then clicking Choose is the
+            // intended mouse path, so we must NOT disable on isConfirmed here.
+            disabled={disabled}
             onClick={(e) => {
               e.stopPropagation();
               onChoose();
