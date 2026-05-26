@@ -147,21 +147,26 @@ function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProp
     transcriptSubmission !== null || cachedRecord !== null,
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Tracks "user clicked Confirm in this mount" vs "bootstrapped from
+  // cache". Only a local submit makes our state authoritative — a cache
+  // bootstrap is just a hint and should yield to a later-arriving
+  // transcript, which is the durable source of truth.
+  const localSubmitRef = useRef<boolean>(false);
 
   const locked = submitted;
 
   // Late-arriving transcript: if nextUserText hydrates after first paint
   // (streaming session restore, async transcript fetch), apply the derived
-  // submission once. Skip when the user has already submitted locally —
-  // their state is authoritative and we don't want to clobber it.
+  // submission. Skip only when the user has submitted locally in this
+  // mount — bootstrap-from-cache must not block transcript hydration.
   useEffect(() => {
-    if (!transcriptSubmission || submitted) return;
+    if (!transcriptSubmission || localSubmitRef.current) return;
     setSelectedByQuestion(questions.map((_, i) => new Set(transcriptSubmission.selection[i])));
     setOtherTextByQuestion(questions.map((q) => (
       transcriptSubmission.otherTextByKey[questionCacheKey(q)] ?? ''
     )));
     setSubmitted(true);
-  }, [transcriptSubmission, submitted, questions]);
+  }, [transcriptSubmission, questions]);
 
   const togglePick = useCallback((qIdx: number, label: string): void => {
     const q = questions[qIdx];
@@ -225,6 +230,7 @@ function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProp
       return;
     }
     const message = formatAnswerMessage(questions, selectedByQuestion, otherTextByQuestion);
+    localSubmitRef.current = true;
     setSubmitted(true);
     setSubmitError(null);
     try {
@@ -232,6 +238,7 @@ function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProp
       if (result?.error) {
         setSubmitError(result.error);
         setSubmitted(false);
+        localSubmitRef.current = false;
       } else {
         // Persist enough to restore submitted view on remount.
         const flat: string[] = [];
@@ -247,6 +254,7 @@ function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProp
     } catch (err) {
       setSubmitError((err as Error).message);
       setSubmitted(false);
+      localSubmitRef.current = false;
     }
   }, [canSubmit, locked, sessionId, questions, selectedByQuestion, otherTextByQuestion, cacheKey]);
 
