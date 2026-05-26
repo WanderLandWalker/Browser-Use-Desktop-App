@@ -22,6 +22,10 @@ interface Props {
   complete: boolean;
   error?: string;
   sessionId?: string;
+  /** User reply turn that follows this form, if any. Used to reconstruct
+   *  the submitted answers in historical sessions — see OptionList for the
+   *  same pattern. */
+  nextUserText?: string | null;
 }
 
 const OTHER_TOKEN = '__other__';
@@ -56,7 +60,7 @@ function decodeAskSelection(value: string): { question: string; label: string } 
 }
 
 export function AskForm(props: Props): React.ReactElement {
-  const { payload, complete, error, sessionId } = props;
+  const { payload, complete, error, sessionId, nextUserText } = props;
   if (!payload) {
     if (complete && error) {
       return (
@@ -67,7 +71,7 @@ export function AskForm(props: Props): React.ReactElement {
     }
     return <AskFormSkeleton />;
   }
-  return <AskFormReady payload={payload} sessionId={sessionId} streaming={!complete} />;
+  return <AskFormReady payload={payload} sessionId={sessionId} streaming={!complete} nextUserText={nextUserText} />;
 }
 
 function AskFormSkeleton(): React.ReactElement {
@@ -89,9 +93,10 @@ interface ReadyProps {
   payload: AskFormPayload;
   sessionId?: string;
   streaming?: boolean;
+  nextUserText?: string | null;
 }
 
-function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.ReactElement {
+function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProps): React.ReactElement {
   const { questions, prompt } = payload;
   const formRef = useRef<HTMLDivElement | null>(null);
 
@@ -104,11 +109,20 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
   }, [sessionId, questions]);
   const cachedRecord = useMemo(() => getSubmissionRecord(cacheKey), [cacheKey]);
 
+  // Transcript-derived submission — read the user's next-turn reply for
+  // an "Answered: …" block and reconstruct selection. Wins over the
+  // in-memory cache so reopened sessions stay correct without persistence.
+  const transcriptSubmission = useMemo(
+    () => deriveAskSubmission(nextUserText, questions),
+    [nextUserText, questions],
+  );
+
   // Per-question selected labels. Use `Set<string>` so single + multi
   // share the same state shape; "Other" picks store the literal
   // OTHER_TOKEN. Per-question typed-other text in a parallel array.
   const [selectedByQuestion, setSelectedByQuestion] = useState<Set<string>[]>(
-    () => questions.map((q) => {
+    () => questions.map((q, i) => {
+      if (transcriptSubmission) return new Set(transcriptSubmission.selection[i]);
       if (!cachedRecord) return new Set();
       const qKey = questionCacheKey(q);
       const restored = new Set<string>();
@@ -123,9 +137,15 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
     }),
   );
   const [otherTextByQuestion, setOtherTextByQuestion] = useState<string[]>(
-    () => questions.map((q) => cachedRecord?.otherTextByKey?.[questionCacheKey(q)] ?? ''),
+    () => questions.map((q) => (
+      transcriptSubmission?.otherTextByKey[questionCacheKey(q)]
+      ?? cachedRecord?.otherTextByKey?.[questionCacheKey(q)]
+      ?? ''
+    )),
   );
-  const [submitted, setSubmitted] = useState<boolean>(cachedRecord !== null);
+  const [submitted, setSubmitted] = useState<boolean>(
+    transcriptSubmission !== null || cachedRecord !== null,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const locked = submitted;
@@ -358,6 +378,53 @@ function QuestionCard({ question, selected, otherText, locked, onToggle, onOther
       </ul>
     </div>
   );
+}
+
+/**
+ * Reverse of formatAnswerMessage: parse the user-reply turn that follows
+ * this form and reconstruct which options were chosen per question.
+ * Returns null when the text isn't an "Answered: …" reply for this form.
+ *
+ * Exported for tests.
+ */
+export function deriveAskSubmission(
+  text: string | null | undefined,
+  questions: AskQuestion[],
+): { selection: Set<string>[]; otherTextByKey: Record<string, string> } | null {
+  if (!text) return null;
+  const head = text.trimStart();
+  if (!head.startsWith('Answered:')) return null;
+
+  const selection: Set<string>[] = questions.map(() => new Set<string>());
+  const otherTextByKey: Record<string, string> = {};
+
+  for (const rawLine of text.split('\n')) {
+    const m = rawLine.match(/^-\s*([^:]+):\s*(.+)$/);
+    if (!m) continue;
+    const labelPrefix = m[1].trim();
+    const valuesStr = m[2].trim();
+    const qIdx = questions.findIndex((q) => (q.header || q.question) === labelPrefix);
+    if (qIdx < 0) continue;
+
+    // Values are comma-separated; `Other: <text>` may itself contain a comma
+    // in theory, but the writer joins with ", " — so split on /,\s+/ which
+    // is tolerant of the common cases without overfitting to oddities.
+    for (const raw of valuesStr.split(/,\s+/)) {
+      const v = raw.trim();
+      if (!v) continue;
+      if (v === 'Other') {
+        selection[qIdx].add(OTHER_TOKEN);
+      } else if (v.startsWith('Other:')) {
+        selection[qIdx].add(OTHER_TOKEN);
+        otherTextByKey[questionCacheKey(questions[qIdx])] = v.slice('Other:'.length).trim();
+      } else {
+        selection[qIdx].add(v);
+      }
+    }
+  }
+
+  if (selection.every((s) => s.size === 0)) return null;
+  return { selection, otherTextByKey };
 }
 
 function formatAnswerMessage(

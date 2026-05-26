@@ -1,13 +1,13 @@
 /**
- * Tiny in-memory cache so OptionList submitted-state survives ChatTurn
- * unmounts (tab switches). Not persisted across app reload — that case
- * needs transcript-derived state, which is a follow-up.
+ * In-memory write-through cache for the brief window between clicking
+ * Choose/Confirm and the resulting user-message landing on the transcript.
  *
- * Keyed by a structurally encoded sessionId + sorted option ids — those
- * are stable for a given picker emission since the agent's emitted text
- * doesn't change once written. Two pickers with literally identical
- * option-id sets in the same session still share submitted state, but
- * delimiters inside ids cannot move values across tuple boundaries.
+ * Cross-reload persistence is intentionally NOT handled here — for that, the
+ * renderer derives submitted state from the transcript itself (the next
+ * user-message after the picker's turn). This cache only smooths the
+ * optimistic window so the picker doesn't flash back to live mode on a
+ * ChatTurn unmount mid-submit. See OptionList.tsx for the transcript-derived
+ * path that handles historical / reopened sessions.
  */
 
 export interface SubmissionRecord {

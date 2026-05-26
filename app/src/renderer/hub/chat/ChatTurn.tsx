@@ -235,6 +235,10 @@ interface ChatTurnProps {
   /** Threaded through to UserBubble so it can fetch attachments persisted
    *  in session_attachments for this turn's `attachmentTurnIndex`. */
   sessionId?: string;
+  /** Text of the user's reply that follows this turn (i.e. the next turn's
+   *  userEntry.content). Forwarded to OptionList/AskForm so they can detect
+   *  historical submissions from the transcript itself — no client cache. */
+  nextUserText?: string | null;
 }
 
 function AssistantActions({
@@ -408,10 +412,12 @@ function StreamingProse({
   target,
   done,
   sessionId,
+  nextUserText,
 }: {
   target: string;
   done: boolean;
   sessionId?: string;
+  nextUserText?: string | null;
 }): React.ReactElement {
   // Run the block extractor over the full target. Recognizes `html`,
   // `htmlview`, and `options` fences and emits structured events for
@@ -456,6 +462,7 @@ function StreamingProse({
               complete={e.complete}
               error={e.error}
               sessionId={sessionId}
+              nextUserText={nextUserText}
             />
           );
         }
@@ -466,6 +473,7 @@ function StreamingProse({
             complete={e.complete}
             error={e.error}
             sessionId={sessionId}
+            nextUserText={nextUserText}
           />
         );
       })}
@@ -745,7 +753,7 @@ function normalizeProse(s: string): string {
   return (s || '').trim().replace(/\s+/g, ' ');
 }
 
-function renderAgentEntries(entries: OutputEntry[], isLive: boolean, sessionId?: string): React.ReactElement[] {
+function renderAgentEntries(entries: OutputEntry[], isLive: boolean, sessionId?: string, nextUserText?: string | null): React.ReactElement[] {
   // Find the trailing prose target: the last `done`, or the trailing live
   // `thinking` if no `done` has landed yet. Both get suppressed from regular
   // per-entry rendering and collapsed into a single <StreamingProse> at the
@@ -871,6 +879,7 @@ function renderAgentEntries(entries: OutputEntry[], isLive: boolean, sessionId?:
         target={proseTarget}
         done={proseDone}
         sessionId={sessionId}
+        nextUserText={nextUserText}
       />,
     );
   }
@@ -897,7 +906,7 @@ function InflightLabel({ since }: { since: number }): React.ReactElement {
   );
 }
 
-export function ChatTurn({ turn, inflightSince, onEditMessage, onShare, isLatest, sessionId }: ChatTurnProps): React.ReactElement {
+export function ChatTurn({ turn, inflightSince, onEditMessage, onShare, isLatest, sessionId, nextUserText }: ChatTurnProps): React.ReactElement {
   const showInflight = inflightSince !== undefined;
   return (
     <div className={`chat-turn${isLatest ? ' chat-turn--latest' : ''}`}>
@@ -913,7 +922,7 @@ export function ChatTurn({ turn, inflightSince, onEditMessage, onShare, isLatest
       {(showInflight || turn.agentEntries.length > 0 || isLatest) && (
         <div className="chat-agent">
           {showInflight && <InflightLabel since={inflightSince!} />}
-          {renderAgentEntries(turn.agentEntries, showInflight, sessionId)}
+          {renderAgentEntries(turn.agentEntries, showInflight, sessionId, nextUserText)}
           {!showInflight && isLatest && (
             <AssistantActions
               content={turn.agentEntries.find((e) => e.type === 'done')?.content ?? ''}

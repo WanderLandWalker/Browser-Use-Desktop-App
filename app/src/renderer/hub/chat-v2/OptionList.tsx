@@ -44,12 +44,18 @@ interface Props {
   /** When true, the session ended before any pick was made. Cards are
    *  dimmed and non-interactive; a banner replaces the foot. */
   cancelled?: boolean;
+  /** Text of the user message immediately following this picker's turn,
+   *  if any. When it matches the "Selected from options: …" format the
+   *  picker initialises in submitted state with that selection — that's
+   *  how reopened/historical sessions get the collapsed receipt view
+   *  without any client-side cache. */
+  nextUserText?: string | null;
 }
 
 const SKELETON_COUNT = 3;
 
 export function OptionList(props: Props): React.ReactElement {
-  const { payload, complete, error, sessionId, cancelled } = props;
+  const { payload, complete, error, sessionId, cancelled, nextUserText } = props;
 
   // Streaming with no options parsed yet — show a full skeleton screen.
   if (!payload) {
@@ -69,6 +75,7 @@ export function OptionList(props: Props): React.ReactElement {
       sessionId={sessionId}
       streaming={!complete}
       cancelled={cancelled}
+      nextUserText={nextUserText}
     />
   );
 }
@@ -99,6 +106,7 @@ interface ReadyProps {
   sessionId?: string;
   streaming?: boolean;
   cancelled?: boolean;
+  nextUserText?: string | null;
 }
 
 const OTHER_TOKEN = '__other__';
@@ -143,7 +151,7 @@ function multiSelectHint(sec: OptionListSection, picked: number): string {
   return `${prefix}${count}`;
 }
 
-function OptionListReady({ payload, sessionId, streaming, cancelled }: ReadyProps): React.ReactElement {
+function OptionListReady({ payload, sessionId, streaming, cancelled, nextUserText }: ReadyProps): React.ReactElement {
   const { sections, prompt } = payload;
   const multi = sections.length > 1;
 
@@ -170,7 +178,8 @@ function OptionListReady({ payload, sessionId, streaming, cancelled }: ReadyProp
     return sec.options.every((o) => o.site === first) ? first : null;
   }), [sections]);
 
-  // Stable cache key — covers ChatTurn unmounts on tab switch.
+  // Stable cache key — covers ChatTurn unmounts on tab switch (in-memory
+  // only; cross-reload state is derived from the transcript below).
   const cacheKey = useMemo(() => {
     const allIds: string[] = [];
     for (const sec of sections) for (const o of sec.options) allIds.push(o.id);
@@ -179,19 +188,34 @@ function OptionListReady({ payload, sessionId, streaming, cancelled }: ReadyProp
   const cachedSelection = useMemo(() => getSubmission(cacheKey), [cacheKey]);
   const cachedRecord = useMemo(() => getSubmissionRecord(cacheKey), [cacheKey]);
 
-  // Per-section selected ids.
+  // Source of truth across reloads: the user's reply turn directly after
+  // this picker's turn. If it matches the "Selected from options: …" format
+  // and references any of THIS picker's option IDs, treat the picker as
+  // submitted with that selection — no client cache required.
+  const transcriptSubmission = useMemo(
+    () => deriveSubmissionFromTranscript(nextUserText, sections),
+    [nextUserText, sections],
+  );
+
+  // Per-section selected ids. Transcript wins over the in-memory cache so
+  // historical sessions render identically across reloads.
   const [selectedBySection, setSelectedBySection] = useState<Set<string>[]>(
-    () => sections.map((sec) => {
+    () => sections.map((sec, i) => {
+      if (transcriptSubmission) return new Set(transcriptSubmission.selection[i]);
       if (!cachedSelection) return new Set<string>();
       const valid = new Set([...sec.options.map((o) => o.id), OTHER_TOKEN]);
       return new Set([...cachedSelection].filter((id) => valid.has(id)));
     }),
   );
   const [otherTextBySection, setOtherTextBySection] = useState<string[]>(
-    () => sections.map((_, i) => cachedRecord?.otherText?.[i] ?? ''),
+    () => sections.map((_, i) => (
+      transcriptSubmission?.otherText[i] ?? cachedRecord?.otherText?.[i] ?? ''
+    )),
   );
   const [cursor, setCursor] = useState<{ section: number; option: number }>({ section: 0, option: 0 });
-  const [submitted, setSubmitted] = useState<boolean>(cachedSelection !== null);
+  const [submitted, setSubmitted] = useState<boolean>(
+    transcriptSubmission !== null || cachedSelection !== null,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const gridRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -774,6 +798,59 @@ function OtherLink({ disabled, onClick }: { disabled: boolean; onClick: () => vo
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Reverse of formatSelectionMessage: parse the user-reply turn that follows
+ * this picker and reconstruct which options were selected. Returns null when
+ * the text is not a selection reply for this picker (no matching IDs, no
+ * "Other:" mention, or wrong prefix entirely).
+ *
+ * Exported for tests.
+ */
+export function deriveSubmissionFromTranscript(
+  text: string | null | undefined,
+  sections: OptionListSection[],
+): { selection: Set<string>[]; otherText: string[] } | null {
+  if (!text) return null;
+  const head = text.trimStart();
+  if (!head.startsWith('Selected from options:')) return null;
+
+  const selection: Set<string>[] = sections.map(() => new Set<string>());
+  const otherText: string[] = sections.map(() => '');
+
+  // Pull every `(id: <id>)` occurrence and route each to the section that
+  // owns that id. IDs are unique within a picker, so first-match wins.
+  const idMatches = Array.from(text.matchAll(/\(id:\s*([^)]+)\)/g));
+  for (const m of idMatches) {
+    const id = m[1].trim();
+    for (let i = 0; i < sections.length; i++) {
+      if (sections[i].options.some((o) => o.id === id)) {
+        selection[i].add(id);
+        break;
+      }
+    }
+  }
+
+  // "Other: <text>" reply — single-section pickers map to section 0.
+  // Multi-section currently always emits `Other: ...` on its own line so
+  // section attribution is best-effort by label prefix; fall back to 0.
+  const otherMatches = Array.from(text.matchAll(/(?:^|\n)[^\n]*?Other:\s*([^\n]+)/g));
+  for (const m of otherMatches) {
+    let target = 0;
+    if (sections.length > 1) {
+      const line = m[0];
+      const labelMatch = line.match(/(?:^|\n)-\s*([^:]+):\s*Other:/);
+      const label = labelMatch?.[1].trim();
+      const idx = label ? sections.findIndex((s) => s.label === label) : -1;
+      target = idx >= 0 ? idx : 0;
+    }
+    selection[target].add(OTHER_TOKEN);
+    otherText[target] = m[1].trim();
+  }
+
+  if (selection.every((s) => s.size === 0)) return null;
+  return { selection, otherText };
+}
 
 function formatSelectionMessage(pickedAcross: { section: OptionListSection; picked: OptionItem[]; otherText: string }[]): string {
   const totalCount = pickedAcross.reduce((n, { picked, otherText }) => n + picked.length + (otherText ? 1 : 0), 0);
