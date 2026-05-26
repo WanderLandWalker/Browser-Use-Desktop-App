@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { extractHostname, getFaviconUrl, isDefaultFavicon, sortDomains } from './domain-utils';
 import { BrowserLogoAvatar } from './BrowserLogoAvatar';
 import { userFacingIpcError } from './ipcErrors';
@@ -97,6 +98,7 @@ function relativeTime(iso: string): string {
 }
 
 export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const toast = useToast();
   const [profiles, setProfiles] = useState<CookieBrowserProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -241,7 +243,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
             onClick={refreshProfiles}
             disabled={profilesLoading}
           >
-            {profilesLoading ? 'Detecting…' : hasLoadedProfiles ? 'Refresh' : 'Detect'}
+            {profilesLoading ? t('Detecting…') : hasLoadedProfiles ? t('Refresh') : t('Detect')}
           </button>
         </div>
 
@@ -279,7 +281,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
                     onClick={() => handleSync(profileId)}
                     disabled={isSyncing || syncingProfile !== null}
                   >
-                    {isSyncing ? 'Syncing…' : record ? 'Re-sync' : 'Sync'}
+                    {isSyncing ? t('Syncing…') : record ? t('Re-sync') : t('Sync')}
                   </button>
                 </li>
               );
@@ -299,7 +301,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
             onClick={refreshCookies}
             disabled={cookiesLoading}
           >
-            {cookiesLoading ? 'Reading…' : 'Refresh'}
+            {cookiesLoading ? t('Reading…') : t('Refresh')}
           </button>
         </div>
 
@@ -311,7 +313,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
           <input
             className="cb-search__input"
             type="text"
-            placeholder="Filter by domain (e.g. github)"
+            placeholder={t('Filter by domain (e.g. github)')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -320,7 +322,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
               type="button"
               className="cb-search__clear"
               onClick={() => setSearch('')}
-              aria-label="Clear search"
+              aria-label={t('Clear search')}
             >
               ×
             </button>
@@ -329,12 +331,12 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
 
         <div className="cb-list" role="list">
           {cookiesLoading && cookies.length === 0 ? (
-            <div className="cb-empty">Reading cookie jar…</div>
+            <div className="cb-empty">{t('Reading cookie jar…')}</div>
           ) : visibleDomains.length === 0 ? (
             <div className="cb-empty">
               {cookies.length === 0
-                ? 'No cookies yet. Sync a browser profile to import them.'
-                : 'No domains match your filter.'}
+                ? t('No cookies yet. Sync a browser profile to import them.')
+                : t('No domains match your filter.')}
             </div>
           ) : (
             visibleDomains.map((d) => (
