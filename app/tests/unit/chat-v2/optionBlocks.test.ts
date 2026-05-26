@@ -23,12 +23,22 @@ function run(chunks: string[]): ExtractEvent[] {
   return extractAll(chunks);
 }
 
+// Helper: minimal valid option with required url + site fields
+const opt = (id: string, extra?: Record<string, unknown>) => ({
+  id,
+  image: `https://cdn/${id}.jpg`,
+  title: `Option ${id}`,
+  url: `https://amazon.com/dp/${id}`,
+  site: 'Amazon',
+  ...extra,
+});
+
 const SAMPLE = {
   prompt: 'Which SSD?',
   multiSelect: false,
   options: [
-    { id: 'a1', image: 'https://cdn/x.jpg', title: 'Samsung 990 Pro', price: '$169' },
-    { id: 'a2', image: 'https://cdn/y.jpg', title: 'WD Black SN850X', price: '$149' },
+    { id: 'a1', image: 'https://cdn/x.jpg', title: 'Samsung 990 Pro', price: '$169', url: 'https://amazon.com/dp/a1', site: 'Amazon' },
+    { id: 'a2', image: 'https://cdn/y.jpg', title: 'WD Black SN850X', price: '$149', url: 'https://amazon.com/dp/a2', site: 'Amazon' },
   ],
 };
 
@@ -79,6 +89,7 @@ describe('options fence — extraction (legacy single-section)', () => {
   });
 
   it('emits a partial option_list with complete:false when stream ends mid-block', () => {
+    // Option is missing url/site — will be dropped; parsed stays null.
     const partial = '```options\n{"options":[{"id":"a1","image":"x","title":"y"';
     const events = run([partial]);
     expect(events).toHaveLength(1);
@@ -91,8 +102,8 @@ describe('options fence — extraction (legacy single-section)', () => {
   it('progressively parses complete inner objects mid-stream', () => {
     const partial =
       '```options\n{"prompt":"Pick a patty","multiSelect":true,"min":1,"max":2,"options":['
-      + '{"id":"a1","image":"i1","title":"Beyond"},'
-      + '{"id":"a2","image":"i2","title":"Beef 85/15"},'
+      + '{"id":"a1","image":"i1","title":"Beyond","url":"https://amazon.com/a1","site":"Amazon"},'
+      + '{"id":"a2","image":"i2","title":"Beef 85/15","url":"https://amazon.com/a2","site":"Amazon"},'
       + '{"id":"a3","image":"i3"';
     const events = run([partial]);
     expect(events).toHaveLength(1);
@@ -113,7 +124,7 @@ describe('options fence — extraction (legacy single-section)', () => {
   it('clamps negative min while progressively parsing legacy options', () => {
     const partial =
       '```options\n{"multiSelect":true,"min":-2,"max":1,"options":['
-      + '{"id":"a1","image":"i1","title":"A"},'
+      + '{"id":"a1","image":"i1","title":"A","url":"https://a.com/1","site":"Amazon"},'
       + '{"id":"a2","image":"i2"';
     const events = run([partial]);
     const e = events[0];
@@ -126,8 +137,8 @@ describe('options fence — extraction (legacy single-section)', () => {
   it('renders parsed cards even when trailing comma and EOF arrive', () => {
     const partial =
       '```options\n{"options":['
-      + '{"id":"a1","image":"i1","title":"A"},'
-      + '{"id":"a2","image":"i2","title":"B"},';
+      + '{"id":"a1","image":"i1","title":"A","url":"https://a.com/1","site":"Amazon"},'
+      + '{"id":"a2","image":"i2","title":"B","url":"https://a.com/2","site":"Amazon"},';
     const events = run([partial]);
     const e = events[0];
     if (e.kind !== 'option_list') throw new Error('expected option_list');
@@ -137,7 +148,7 @@ describe('options fence — extraction (legacy single-section)', () => {
   it('handles strings containing braces inside option titles', () => {
     const partial =
       '```options\n{"options":['
-      + '{"id":"a1","image":"i1","title":"Brand {limited edition}"},'
+      + '{"id":"a1","image":"i1","title":"Brand {limited edition}","url":"https://a.com/1","site":"Amazon"},'
       + '{"id":"a2","image":"i2","title":"Plain"';
     const events = run([partial]);
     const e = events[0];
@@ -156,16 +167,16 @@ describe('options fence — multi-section', () => {
           label: 'Patty',
           multiSelect: false,
           options: [
-            { id: 'patty-1', image: 'i', title: 'Beyond' },
-            { id: 'patty-2', image: 'i', title: 'Beef 85/15' },
+            opt('patty-1', { title: 'Beyond' }),
+            opt('patty-2', { title: 'Beef 85/15' }),
           ],
         },
         {
           label: 'Bun',
           multiSelect: true, min: 1, max: 2,
           options: [
-            { id: 'bun-1', image: 'i', title: 'Brioche' },
-            { id: 'bun-2', image: 'i', title: 'Sesame' },
+            opt('bun-1', { title: 'Brioche' }),
+            opt('bun-2', { title: 'Sesame' }),
           ],
         },
       ],
@@ -185,7 +196,7 @@ describe('options fence — multi-section', () => {
   it('drops sections whose options array yields no valid items', () => {
     const payload = {
       sections: [
-        { label: 'Good', options: [{ id: 'g1', image: 'i', title: 't' }] },
+        { label: 'Good', options: [opt('g1')] },
         { label: 'Bad', options: [{ id: 'b1' }] },   // all options invalid → drop section
       ],
     };
@@ -208,12 +219,12 @@ describe('options fence — multi-section', () => {
         {
           label: 'Patty',
           fieldSchema: ['Price', 'Protein'],
-          options: [{ id: 'p1', image: 'i', title: 't' }],
+          options: [opt('p1')],
         },
         {
           label: 'Bun',
           fieldSchema: ['Price', 'Calories'],
-          options: [{ id: 'b1', image: 'i', title: 't' }],
+          options: [opt('b1')],
         },
       ],
     }));
@@ -225,7 +236,7 @@ describe('options fence — multi-section', () => {
     // First section closes, second section opens but isn't closed.
     const partial =
       '```options\n{"prompt":"Pick ingredients","sections":['
-      + '{"label":"Patty","options":[{"id":"p1","image":"i","title":"Beyond"}]},'
+      + '{"label":"Patty","options":[{"id":"p1","image":"i","title":"Beyond","url":"https://a.com/p1","site":"Amazon"}]},'
       + '{"label":"Bun","options":[{"id":"b1","image":"i"';
     const events = run([partial]);
     const e = events[0];
@@ -250,17 +261,47 @@ describe('parseOptionList — validation', () => {
     expect(error).toMatch(/options|sections/);
   });
 
-  it('drops malformed individual options within a section', () => {
+  it('drops options missing url or site', () => {
     const { parsed } = parseOptionList(JSON.stringify({
       options: [
-        { id: 'ok', image: 'i', title: 't' },
-        { id: 'no-title', image: 'i' },
-        { image: 'i', title: 't' },
-        { id: 'no-image', title: 't' },
-        { id: 'ok2', image: 'i2', title: 't2' },
+        opt('ok'),
+        { id: 'no-url', image: 'i', title: 't', site: 'Amazon' },       // missing url
+        { id: 'no-site', image: 'i', title: 't', url: 'https://x.com' }, // missing site
+        opt('ok2'),
       ],
     }));
     expect(parsed?.sections[0].options.map((o) => o.id)).toEqual(['ok', 'ok2']);
+  });
+
+  it('drops malformed individual options within a section', () => {
+    const { parsed } = parseOptionList(JSON.stringify({
+      options: [
+        opt('ok'),
+        { id: 'no-title', image: 'i', url: 'https://x', site: 'Amazon' },
+        { image: 'i', title: 't', url: 'https://x', site: 'Amazon' },
+        { id: 'no-image', title: 't', url: 'https://x', site: 'Amazon' },
+        opt('ok2'),
+      ],
+    }));
+    expect(parsed?.sections[0].options.map((o) => o.id)).toEqual(['ok', 'ok2']);
+  });
+
+  it('drops known Airbnb badge art instead of rendering it as a listing photo', () => {
+    const { parsed } = parseOptionList(JSON.stringify({
+      options: [
+        opt('badge', {
+          site: 'Airbnb',
+          url: 'https://www.airbnb.com/rooms/896630866775094698',
+          image: 'https://a0.muscache.com/im/pictures/airbnb-platform-assets/AirbnbPlatformAssets-GuestFavorite/original/4d090f93-f9a5-4f06-95e4-ca737c0d0ab5.png?im_w=720',
+        }),
+        opt('listing-photo', {
+          site: 'Airbnb',
+          url: 'https://www.airbnb.com/rooms/1070272052169818710',
+          image: 'https://a0.muscache.com/im/pictures/user/User-556869189/original/57d2e836-1238-47a9-ac83-26a0fd8fe99f.jpeg?im_w=720',
+        }),
+      ],
+    }));
+    expect(parsed?.sections[0].options.map((o) => o.id)).toEqual(['listing-photo']);
   });
 
   it('rejects when zero options survive in a legacy payload', () => {
@@ -271,7 +312,7 @@ describe('parseOptionList — validation', () => {
 
   it('defaults multiSelect=false, min=1, max=1 when omitted', () => {
     const { parsed } = parseOptionList(JSON.stringify({
-      options: [{ id: 'a', image: 'i', title: 't' }],
+      options: [opt('a')],
     }));
     expect(parsed?.sections[0].multiSelect).toBe(false);
     expect(parsed?.sections[0].min).toBe(1);
@@ -283,12 +324,7 @@ describe('parseOptionList — validation', () => {
       multiSelect: true,
       min: 2,
       max: 3,
-      options: [
-        { id: 'a', image: 'i', title: 't' },
-        { id: 'b', image: 'i', title: 't' },
-        { id: 'c', image: 'i', title: 't' },
-        { id: 'd', image: 'i', title: 't' },
-      ],
+      options: [opt('a'), opt('b'), opt('c'), opt('d')],
     }));
     expect(parsed?.sections[0].multiSelect).toBe(true);
     expect(parsed?.sections[0].min).toBe(2);
@@ -300,11 +336,7 @@ describe('parseOptionList — validation', () => {
       multiSelect: true,
       min: 3,
       max: 1,
-      options: [
-        { id: 'a', image: 'i', title: 't' },
-        { id: 'b', image: 'i', title: 't' },
-        { id: 'c', image: 'i', title: 't' },
-      ],
+      options: [opt('a'), opt('b'), opt('c')],
     }));
     expect(parsed?.sections[0].min).toBe(3);
     expect(parsed?.sections[0].max).toBe(3);
@@ -314,22 +346,22 @@ describe('parseOptionList — validation', () => {
     const { parsed } = parseOptionList(JSON.stringify({
       options: [{
         id: 'a', image: 'i', title: 't',
-        subtitle: 's', price: '$9', merchant: 'Amazon', url: 'https://x',
+        subtitle: 's', price: '$9', merchant: 'Trader Joes',
+        url: 'https://x.com/a', site: 'Amazon',
       }],
     }));
     const o = parsed?.sections[0].options[0];
     expect(o?.description).toBe('s');
     expect(o?.fields?.Price).toBe('$9');
-    expect(o?.fields?.Merchant).toBe('Amazon');
-    expect(o?.url).toBe('https://x');
+    expect(o?.fields?.Merchant).toBe('Trader Joes');
+    expect(o?.url).toBe('https://x.com/a');
+    expect(o?.site).toBe('Amazon');
   });
 
   it('keeps the agent-supplied description over a stale subtitle', () => {
     const { parsed } = parseOptionList(JSON.stringify({
-      options: [{
-        id: 'a', image: 'i', title: 't',
-        description: 'long form', subtitle: 'short stale',
-      }],
+      options: [{ id: 'a', image: 'i', title: 't', url: 'https://x.com', site: 'Amazon',
+        description: 'long form', subtitle: 'short stale' }],
     }));
     expect(parsed?.sections[0].options[0].description).toBe('long form');
   });
@@ -338,8 +370,8 @@ describe('parseOptionList — validation', () => {
     const { parsed } = parseOptionList(JSON.stringify({
       fieldSchema: ['Price', 'Rating', 'Bedrooms'],
       options: [
-        { id: 'a', image: 'i', title: 't', fields: { Price: '$120', Rating: '4.5★', Bedrooms: '2' } },
-        { id: 'b', image: 'i', title: 't', fields: { Price: '$200', Bedrooms: '3' } },
+        { id: 'a', image: 'i', title: 't', url: 'https://x.com/a', site: 'Amazon', fields: { Price: '$120', Rating: '4.5★', Bedrooms: '2' } },
+        { id: 'b', image: 'i', title: 't', url: 'https://x.com/b', site: 'Amazon', fields: { Price: '$200', Bedrooms: '3' } },
       ],
     }));
     expect(parsed?.sections[0].fieldSchema).toEqual(['Price', 'Rating', 'Bedrooms']);
@@ -350,8 +382,8 @@ describe('parseOptionList — validation', () => {
   it('leaves fieldSchema undefined when not declared', () => {
     const { parsed } = parseOptionList(JSON.stringify({
       options: [
-        { id: 'a', image: 'i', title: 't', fields: { Price: '$1', Rating: '4★' } },
-        { id: 'b', image: 'i', title: 't', fields: { Price: '$2' } },
+        { id: 'a', image: 'i', title: 't', url: 'https://x.com/a', site: 'Amazon', fields: { Price: '$1', Rating: '4★' } },
+        { id: 'b', image: 'i', title: 't', url: 'https://x.com/b', site: 'Amazon', fields: { Price: '$2' } },
       ],
     }));
     expect(parsed?.sections[0].fieldSchema).toBeUndefined();
@@ -359,22 +391,30 @@ describe('parseOptionList — validation', () => {
 
   it('rejects non-string field values silently', () => {
     const { parsed } = parseOptionList(JSON.stringify({
-      options: [{ id: 'a', image: 'i', title: 't', fields: { Price: '$1', Bad: null } }],
+      options: [{ id: 'a', image: 'i', title: 't', url: 'https://x.com/a', site: 'Amazon', fields: { Price: '$1', Bad: null } }],
     }));
     expect(parsed?.sections[0].options[0].fields?.Price).toBe('$1');
     expect(parsed?.sections[0].options[0].fields?.Bad).toBeUndefined();
   });
 
-  it('defaults allowOther=true per section', () => {
+  it('defaults allowOther=false per section', () => {
     const { parsed } = parseOptionList(JSON.stringify({
-      options: [{ id: 'a', image: 'i', title: 't' }],
+      options: [opt('a')],
+    }));
+    expect(parsed?.sections[0].allowOther).toBe(false);
+  });
+
+  it('honors explicit allowOther=true', () => {
+    const { parsed } = parseOptionList(JSON.stringify({
+      options: [opt('a')],
+      allowOther: true,
     }));
     expect(parsed?.sections[0].allowOther).toBe(true);
   });
 
   it('honors explicit allowOther=false', () => {
     const { parsed } = parseOptionList(JSON.stringify({
-      options: [{ id: 'a', image: 'i', title: 't' }],
+      options: [opt('a')],
       allowOther: false,
     }));
     expect(parsed?.sections[0].allowOther).toBe(false);
@@ -383,11 +423,11 @@ describe('parseOptionList — validation', () => {
   it('allowOther defaults per-section in multi-section blocks', () => {
     const { parsed } = parseOptionList(JSON.stringify({
       sections: [
-        { label: 'A', options: [{ id: 'a', image: 'i', title: 't' }] },
-        { label: 'B', allowOther: false, options: [{ id: 'b', image: 'i', title: 't' }] },
+        { label: 'A', options: [opt('a')] },
+        { label: 'B', allowOther: true, options: [opt('b')] },
       ],
     }));
-    expect(parsed?.sections[0].allowOther).toBe(true);
-    expect(parsed?.sections[1].allowOther).toBe(false);
+    expect(parsed?.sections[0].allowOther).toBe(false);
+    expect(parsed?.sections[1].allowOther).toBe(true);
   });
 });

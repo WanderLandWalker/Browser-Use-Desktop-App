@@ -55,7 +55,8 @@ export function htmlBlockGuidanceLines(theme: 'light' | 'dark' = 'dark'): string
   return [
     `UI THEME: ${theme}. When you emit a \`\`\`html block, use the active palette below. The full per-theme reference lives in the 'neobrutalist-html' interaction skill.`,
     `Active palette — card bg ${p.cardBg}, border ${p.border}, shadow ${p.shadow}, foreground ${p.fg}. Accents: ${p.accents}. Pick one bold accent + one secondary per artifact.`,
-    'HTML blocks are an optional output channel — use them when layout helps the reader (plans, comparisons, status, timelines, diffs). Conversational replies, tool previews, and short answers should stay as plain markdown.',
+    'HTML blocks are an optional output channel — use them when layout helps the reader (plans, comparisons, status, timelines, diffs). Also use them for dense, easily organized browser results or confirmations: shopping/cart/order summaries, delivery windows, addresses, prices, quantities, retailer/site names, reservation details, selected items, and next-step choices. Conversational replies, tool previews, and short answers should stay as plain markdown.',
+    'Rule of thumb: if you have 3+ concrete facts from the page that naturally fit labeled rows, columns, cards, or a receipt-style summary, emit a compact ```html block instead of burying them in a paragraph.',
     'When you emit an HTML block, keep it self-contained: inline styles or a single inline <style> tag are fine; do not reference external stylesheets, scripts, fonts, or images by URL — the sandbox blocks them.',
   ];
 }
@@ -73,9 +74,12 @@ export const HTML_BLOCK_GUIDANCE_LINES = htmlBlockGuidanceLines('dark');
  */
 export function optionsBlockGuidanceLines(): string[] {
   return [
-    'When you need the user to disambiguate between products or options that you can see in the live browser (e.g. shopping search results), emit a ```options fenced block carrying JSON: { prompt, multiSelect, min, max, options: [{ id, image, title, subtitle?, price?, merchant?, url? }] }. Each option requires id, image (absolute URL), and title; the rest are optional.',
+    'When you need the user to disambiguate between products or options that you can see in the live browser (e.g. shopping search results), emit a ```options fenced block carrying JSON: { prompt, multiSelect, min, max, allowOther?, options: [{ id, image, title, url, site, description?, fields?, subtitle?, price?, merchant? }] }. Each option REQUIRES: id, image (absolute URL), title, url (absolute URL to the source listing), and site. The rest are optional.',
+    '`image` must be the actual product/listing hero photo, not a badge, favicon, category icon, host avatar, or decorative site asset. For Airbnb, reject `AirbnbPlatformAssets`, `GuestFavorite`, and `orthographic-images` URLs; choose the largest visible listing photo or omit that option.',
+    '`site` is the brand token a human would call the site — "Amazon", "Instacart", "Airbnb", "Costco" — not the hostname. No TLD, no `.com`, no `.co.uk`. For long-tail sites with no recognizable brand, use the bare second-level domain ("enginediy", "jadecommercecenter"). The renderer derives the favicon mechanically from `url`; `site` is the display label.',
+    '`allowOther` defaults to false. The renderer no longer shows a free-text "Other" card by default — the chat input below the picker already handles "none of these, I want X". Only set `allowOther: true` when the listed options genuinely aren\'t exhaustive and a typed answer is meaningful.',
     'The `options` block ENDS YOUR TURN. After emitting it, do not call any more tools — stop and wait for the user. Their selection arrives as the next user message in the form "Selected from options: <title> (id: <id>)" so you can resume on the same browser session.',
-    'See the `options-block` interaction skill for the full schema, DOM-extraction snippet for grabbing image URLs / titles / prices from product tiles, and worked examples.',
+    'See the `options-block` interaction skill for the full schema, DOM-extraction snippet for grabbing image URLs / titles / prices / source URLs from product tiles, and worked examples.',
   ];
 }
 

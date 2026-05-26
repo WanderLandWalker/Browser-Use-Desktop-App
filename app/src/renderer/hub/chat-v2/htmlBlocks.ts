@@ -25,10 +25,14 @@ export interface OptionItem {
   description?: string;
   /** Arbitrary label→value rows shown at the card foot. The block's
    *  `fieldSchema` (or the union of all options' keys when no schema is
-   *  declared) determines render order; missing values render as "—" so
-   *  cards align vertically across the grid. */
+   *  declared) determines render order; missing values are omitted so
+   *  cards may have different heights across the grid. */
   fields?: Record<string, string>;
-  url?: string;
+  /** Required. Full URL to the product page. Options without a URL are dropped. */
+  url: string;
+  /** Required. Brand token only — "Amazon", "Instacart", "Airbnb", etc.
+   *  No TLD, no `.com`. Options without a site are dropped. */
+  site: string;
 
   // Backward-compat syntactic sugar — these get folded into `fields` /
   // `description` by the parser. New callers should set fields/description
@@ -377,7 +381,7 @@ export function parseOptionList(raw: string, opts: { partial?: boolean } = {}): 
         options: obj.options,
       });
       if (!section) {
-        return { parsed: null, error: 'no valid options (each option needs id, image, title)' };
+        return { parsed: null, error: 'no valid options (each option needs id, image, title, url, site)' };
       }
       return { parsed: { prompt, sections: [section] } };
     }
@@ -421,7 +425,7 @@ function validateSection(raw: unknown): OptionListSection | null {
     min,
     max,
     fieldSchema: fieldSchema && fieldSchema.length > 0 ? fieldSchema : undefined,
-    allowOther: typeof o.allowOther === 'boolean' ? o.allowOther : true,
+    allowOther: typeof o.allowOther === 'boolean' ? o.allowOther : false,
     options,
   };
 }
@@ -488,7 +492,7 @@ function extractPartial(raw: string): { parsed: OptionListPayload | null; error?
         multiSelect,
         min,
         max,
-        allowOther: true,
+        allowOther: false,
         options,
       }],
     },
@@ -547,7 +551,11 @@ function validateOption(raw: unknown): OptionItem | null {
   const id = typeof o.id === 'string' ? o.id.trim() : '';
   const image = typeof o.image === 'string' ? o.image.trim() : '';
   const title = typeof o.title === 'string' ? o.title.trim() : '';
-  if (!id || !image || !title) return null;
+  const url = typeof o.url === 'string' ? o.url.trim() : '';
+  const site = typeof o.site === 'string' ? o.site.trim() : '';
+  // url and site are now required — drop options that omit either.
+  if (!id || !image || !title || !url || !site) return null;
+  if (isLikelyDecorativeOptionImage(image)) return null;
 
   // Coerce the agent-supplied `fields` map into a clean string→string record.
   const fields: Record<string, string> = {};
@@ -574,8 +582,24 @@ function validateOption(raw: unknown): OptionItem | null {
     title,
     description,
     fields: Object.keys(fields).length > 0 ? fields : undefined,
-    url: typeof o.url === 'string' ? o.url : undefined,
+    url,
+    site,
   };
+}
+
+function isLikelyDecorativeOptionImage(imageUrl: string): boolean {
+  let pathname = imageUrl.toLowerCase();
+  try {
+    const parsed = new URL(imageUrl);
+    pathname = `${parsed.hostname}${parsed.pathname}`.toLowerCase();
+  } catch {
+    // Keep the raw string fallback for tests and partially-formed URLs.
+  }
+
+  return pathname.includes('airbnbplatformassets')
+    || pathname.includes('airbnb-platform-assets')
+    || pathname.includes('guestfavorite')
+    || pathname.includes('orthographic-images');
 }
 
 // ---------------------------------------------------------------------------
