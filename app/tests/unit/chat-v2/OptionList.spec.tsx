@@ -9,6 +9,15 @@ import { _resetSubmissionCacheForTests } from '@/renderer/hub/chat-v2/optionList
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// Minimal valid option with required url + site fields
+const mkOpt = (id: string, title: string) => ({
+  id,
+  image: `https://cdn/${id}.jpg`,
+  title,
+  url: `https://amazon.com/dp/${id}`,
+  site: 'Amazon',
+});
+
 function renderOptions(payload: OptionListPayload, sessionId = 'session-1'): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -41,7 +50,7 @@ describe('OptionList', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not show section 0 when only missing Other text blocks submit', () => {
+  it('shows the Other text link when allowOther=true, not a grid card', () => {
     const payload: OptionListPayload = {
       sections: [
         {
@@ -49,27 +58,35 @@ describe('OptionList', () => {
           min: 1,
           max: 1,
           allowOther: true,
-          options: [{ id: 'a', image: 'i', title: 'A' }],
-        },
-        {
-          multiSelect: false,
-          min: 1,
-          max: 1,
-          allowOther: false,
-          options: [{ id: 'b', image: 'i', title: 'B' }],
+          options: [mkOpt('a', 'A')],
         },
       ],
     };
     const { container, root } = renderOptions(payload);
 
-    act(() => {
-      container.querySelector<HTMLElement>('.chatv2-optlist__card--other')?.click();
-      container.querySelectorAll<HTMLButtonElement>('button.chatv2-optlist__card')[1]?.click();
-    });
+    // Other should be rendered as a link, not as a grid card
+    expect(container.querySelector('.chatv2-optlist__card--other')).toBeNull();
+    expect(container.querySelector('.chatv2-optlist__other-link')).not.toBeNull();
 
-    const label = container.querySelector<HTMLButtonElement>('.chatv2-optlist__submit')?.textContent ?? '';
-    expect(label).toBe('Type your "Other" answer');
-    expect(label).not.toContain('section 0');
+    act(() => root.unmount());
+  });
+
+  it('does not show Other link when allowOther=false (default)', () => {
+    const payload: OptionListPayload = {
+      sections: [
+        {
+          multiSelect: false,
+          min: 1,
+          max: 1,
+          allowOther: false,
+          options: [mkOpt('b', 'B')],
+        },
+      ],
+    };
+    const { container, root } = renderOptions(payload);
+
+    expect(container.querySelector('.chatv2-optlist__other-link')).toBeNull();
+    expect(container.querySelector('.chatv2-optlist__card--other')).toBeNull();
 
     act(() => root.unmount());
   });
@@ -82,8 +99,8 @@ describe('OptionList', () => {
         max: 1,
         allowOther: false,
         options: [
-          { id: 'a', image: 'i', title: 'A' },
-          { id: 'b', image: 'i', title: 'B' },
+          mkOpt('a', 'A'),
+          mkOpt('b', 'B'),
         ],
       }],
     };
@@ -113,6 +130,38 @@ describe('OptionList', () => {
     expect(resume).toHaveBeenCalledTimes(1);
     expect(resume.mock.calls[0][1]).toContain('id: b');
     expect(resume.mock.calls[0][1]).not.toContain('id: a');
+
+    act(() => root.unmount());
+  });
+
+  it('clicking Choose button on a single-select card immediately submits', async () => {
+    const payload: OptionListPayload = {
+      sections: [{
+        multiSelect: false,
+        min: 1,
+        max: 1,
+        allowOther: false,
+        options: [mkOpt('x', 'X'), mkOpt('y', 'Y')],
+      }],
+    };
+    const resume = vi.fn(async () => ({ resumed: true }));
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: { sessions: { resume } },
+    });
+    const { container, root } = renderOptions(payload);
+
+    // Click the Choose button on the first card
+    const chooseBtn = container.querySelector<HTMLButtonElement>('.chatv2-optlist__choose');
+    expect(chooseBtn).not.toBeNull();
+    await act(async () => {
+      chooseBtn!.click();
+      await Promise.resolve();
+    });
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    const call = resume.mock.calls[0] as unknown as [string, string];
+    expect(call[1]).toContain('id: x');
 
     act(() => root.unmount());
   });

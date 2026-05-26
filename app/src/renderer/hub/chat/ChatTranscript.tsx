@@ -289,6 +289,11 @@ export const ChatTranscript = forwardRef<HTMLDivElement, ChatTranscriptProps>(fu
           onEditMessage={i === firstUserTurnIdx ? onEditMessage : undefined}
           onShare={i === firstUserTurnIdx ? onShare : undefined}
           isLatest={turns.length > 1 && i === turns.length - 1}
+          // Transcript-derived state for pickers in this turn: the next
+          // turn's user message is the user's response to any options/ask
+          // block emitted here. OptionList/AskForm parse it to render the
+          // collapsed "chose" view in historical sessions without a cache.
+          nextUserText={turns[i + 1]?.userEntry?.content ?? null}
         />
       ))}
     </div>

@@ -1,16 +1,42 @@
 # Neobrutalist HTML — house style
 
-How `\`\`\`html` blocks should LOOK. This skill defines the visual language only.
-It does not tell you what structure to build, what elements to use, or when to
-emit a block — that's up to you per task. If you're already going to emit HTML,
-make it look like this.
+How `\`\`\`html` blocks should LOOK. This skill defines the visual language and
+basic structure patterns. If the system prompt tells you an answer is a good
+HTML candidate, make it look like this.
+
+## Good HTML candidates
+
+Use an HTML block when the output has dense facts that are easy to organize into
+labeled rows, columns, cards, or a receipt-style summary. Browser task
+confirmations often qualify: selected item, retailer, cart quantity, price,
+delivery/pickup window, delivery address, reservation details, order state, and
+next-step choices. If you have 3+ concrete facts from the page, a compact HTML
+summary is usually easier to scan than a prose paragraph.
+
+Keep genuinely short answers in markdown. Don't emit HTML just to decorate one
+sentence.
+
+## Structure patterns
+
+- **Receipt summary:** one headline item, then 4-8 label/value rows for price,
+  quantity, delivery window, address, retailer, cart state, or confirmation
+  number.
+- **Comparison grid:** 2-6 cards with the same field labels across each card.
+- **Status panel:** current state at top, evidence/facts in rows, next actions
+  at the bottom.
 
 ## Mandatory visual rules
 
-- **3px solid #000 borders** on every block-level element you want visible.
-  Not 1px, not subtle gray. (For nested elements 2px is acceptable.)
-- **Hard offset shadow**: `box-shadow: 4px 4px 0 #000;` (no blur, no spread).
+- **3px solid palette border** on every block-level element you want visible.
+  In light mode use black; in dark mode use cream (`#f4ecd8`). Not 1px, not
+  subtle gray. (For nested elements 2px is acceptable.)
+- **Hard offset shadow** using the palette shadow color: black in light mode,
+  cream (`#f4ecd8`) in dark mode. Example: `box-shadow: 4px 4px 0 #f4ecd8;`.
   Larger surfaces can use 6px or 8px. Never soft shadows.
+- **No accent-color structural shadows.** Gold/yellow, red, green, blue, pink,
+  and purple are for small highlights, badges, selected metrics, or short
+  dividers; they should not become the large outer frame or the dominant
+  shadow in dark mode.
 - **Square corners**: `border-radius: 0`. (4px max is tolerable on small chips
   if every chip uses the same value.)
 - **Flat color fills** — no gradients, no semi-transparent overlays for
@@ -71,8 +97,9 @@ palette that matches.
 
 ### Two-color rule (both themes)
 
-Pick **one** bold accent + **one** secondary accent per artifact. More than
-two accents fights the bold-borders aesthetic.
+Pick **one** bold accent + **one** secondary accent per artifact, but keep them
+small. More than two accents fights the bold-borders aesthetic, and a large
+accent-colored shadow usually overwhelms dark-mode artifacts.
 
 ## Typography
 
