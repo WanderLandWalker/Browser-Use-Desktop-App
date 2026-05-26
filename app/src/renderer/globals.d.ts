@@ -204,6 +204,7 @@ interface ElectronShellAPI {
   platform: string;
   getPlatform: () => Promise<string>;
   setOverlay: (active: boolean) => void;
+  openExternal: (url: string) => Promise<{ opened: boolean }>;
 }
 
 interface ElectronPillAPI {

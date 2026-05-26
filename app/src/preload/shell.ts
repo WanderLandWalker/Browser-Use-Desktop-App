@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setOverlay: (active: boolean): void => {
       ipcRenderer.send('shell:set-overlay', active);
     },
+    openExternal: (url: string): Promise<{ opened: boolean }> =>
+      ipcRenderer.invoke('shell:open-external', url),
   },
   pill: {
     toggle: (): Promise<void> => ipcRenderer.invoke('pill:toggle'),
