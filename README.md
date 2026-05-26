@@ -59,6 +59,43 @@ Linux packages are built in Docker so local distro tools do not affect the outpu
 task linux:make:docker
 ```
 
+## 简体中文
+
+> 在您的桌面上运行一群浏览器代理。
+
+无需更换浏览器——保持您常用的 Chrome，这只是代理端。将您的 Cookie 导入新的 Chromium 实例，让代理在您登录过的所有地方保持登录状态，并通过全局快捷键从任何地方启动任务。
+
+基于 [Browser Harness](https://github.com/browser-use/browser-harness) 构建。
+
+### 下载
+
+- **macOS (Apple Silicon):** [Browser-Use-arm64.dmg](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-arm64.dmg)
+- **Windows (x64):** [Browser-Use-Setup.exe](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-Setup.exe)
+- **Linux:** [Browser-Use-x64.AppImage](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-x64.AppImage)
+
+### 提供商
+
+- **Anthropic** - Claude Code 订阅或 API 密钥
+- **Codex** - ChatGPT 订阅或 API 密钥
+
+### 通道
+
+入站消息通道可以自动触发代理会话。
+
+- **WhatsApp** — 给自己发送带有 `@BU` 的短信，发送和接收代理消息
+
+### 国际化
+
+本应用内置简体中文和英文界面。在 **设置 → 语言** 中切换。
+
+### 开发
+
+需要 [Task](https://taskfile.dev)（`brew install go-task`）。
+
+```bash
+task up    # 安装依赖并启动应用
+```
+
 ## License
 
 MIT
