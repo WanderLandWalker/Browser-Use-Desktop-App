@@ -219,6 +219,17 @@ function OptionListReady({ payload, sessionId, streaming, cancelled, nextUserTex
   const [submitError, setSubmitError] = useState<string | null>(null);
   const gridRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  // Late-arriving transcript: if nextUserText hydrates after first paint
+  // (streaming restore / async transcript fetch), apply the derived
+  // submission once. Skip when the user has already submitted locally —
+  // their state is authoritative and we don't want to clobber it.
+  useEffect(() => {
+    if (!transcriptSubmission || submitted) return;
+    setSelectedBySection(sections.map((_, i) => new Set(transcriptSubmission.selection[i])));
+    setOtherTextBySection(transcriptSubmission.otherText.slice());
+    setSubmitted(true);
+  }, [transcriptSubmission, submitted, sections]);
+
   const locked = submitted || (cancelled ?? false);
 
   const toggle = useCallback((sectionIdx: number, optionIdx: number): void => {

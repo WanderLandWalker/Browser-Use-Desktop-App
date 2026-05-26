@@ -150,6 +150,19 @@ function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProp
 
   const locked = submitted;
 
+  // Late-arriving transcript: if nextUserText hydrates after first paint
+  // (streaming session restore, async transcript fetch), apply the derived
+  // submission once. Skip when the user has already submitted locally —
+  // their state is authoritative and we don't want to clobber it.
+  useEffect(() => {
+    if (!transcriptSubmission || submitted) return;
+    setSelectedByQuestion(questions.map((_, i) => new Set(transcriptSubmission.selection[i])));
+    setOtherTextByQuestion(questions.map((q) => (
+      transcriptSubmission.otherTextByKey[questionCacheKey(q)] ?? ''
+    )));
+    setSubmitted(true);
+  }, [transcriptSubmission, submitted, questions]);
+
   const togglePick = useCallback((qIdx: number, label: string): void => {
     const q = questions[qIdx];
     if (!q) return;
