@@ -1,3 +1,5 @@
+[**English**](CONTRIBUTING.md) | [**简体中文**](CONTRIBUTING.zh.md)
+
 # Contributing to Browser Use Desktop
 
 Install these first:
@@ -118,12 +120,6 @@ app/src/renderer/
 - **React components:** import `useTranslation` from `react-i18next`, call the `t()` function.
 - **Module-level code (outside components):** import `i18n` from `../i18n`, call `i18n.t()`.
 - All 5 renderer entry points (`hub/`, `onboarding/`, `pill/`, `popup/`, `logs/`) already wrap their content with `<I18nextProvider>`, so any component inside them can use the hook.
-
-### 国际化（简体中文）
-
-本应用内置简体中文界面，在 **设置 → 语言** 中切换。如需添加翻译或新语言，请参考上方英文说明。
-
-语言文件位于 `app/src/renderer/locales/`，编辑后运行 `cd app && task typecheck` 检查。
 
 ## Where to ask questions
 

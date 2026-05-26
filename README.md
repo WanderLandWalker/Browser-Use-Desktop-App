@@ -1,5 +1,7 @@
 <img width="1456" height="484" alt="desktop-app-banner" src="https://github.com/user-attachments/assets/550ca16a-5a61-4ded-92f0-a30421870223" />
 
+[**English**](README.md) | [**简体中文**](README.zh.md)
+
 # Browser Use Desktop App
 
 > Run a team of browser agents on your desktop.
@@ -37,15 +39,9 @@ Inbound message channels can trigger agent sessions automatically.
 
 - **WhatsApp** — text yourself with `@BU` to send and receive agent messages
 
-## Internationalization (i18n)
+## Internationalization
 
-Browser Use Desktop ships with built-in Chinese (简体中文) and English (English) interface. Switch language in **Settings → Language**.
-
-To contribute translations or add a new locale, see [CONTRIBUTING.md → i18n](CONTRIBUTING.md#internationalization-i18n).
-
-## 简体中文
-
-本应用已内置简体中文界面。在 **设置 → 语言** 中切换即可。翻译贡献指南见 [CONTRIBUTING.md → 国际化](CONTRIBUTING.md#internationalization-i18n--国际化)。
+This app supports English and 简体中文. Switch language in **Settings → Language**.
 
 ## License
 
