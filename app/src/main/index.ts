@@ -2113,6 +2113,17 @@ ipcMain.handle('shell:get-platform', () => {
   return process.platform;
 });
 
+// Open an absolute http(s) URL in the user's default browser. Used by the
+// chat-v2 option picker's "View on {site}" button so the user can verify a
+// source listing without leaving the app to switch tabs themselves.
+ipcMain.handle('shell:open-external', async (_event, url: unknown) => {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+    throw new Error('shell:open-external only accepts http(s) URLs');
+  }
+  await shell.openExternal(url);
+  return { opened: true };
+});
+
 // Structured renderer log forwarding — see main/rendererLogIpc.ts and
 // renderer/shared/logger.ts. Registered alongside other preload-safe
 // channels so the bridge is ready before any window finishes loading.

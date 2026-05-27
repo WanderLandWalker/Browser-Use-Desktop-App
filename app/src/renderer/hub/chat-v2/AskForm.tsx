@@ -23,6 +23,10 @@ interface Props {
   complete: boolean;
   error?: string;
   sessionId?: string;
+  /** User reply turn that follows this form, if any. Used to reconstruct
+   *  the submitted answers in historical sessions — see OptionList for the
+   *  same pattern. */
+  nextUserText?: string | null;
 }
 
 const OTHER_TOKEN = '__other__';
@@ -58,7 +62,7 @@ function decodeAskSelection(value: string): { question: string; label: string } 
 
 export function AskForm(props: Props): React.ReactElement {
   const { t } = useTranslation();
-  const { payload, complete, error, sessionId } = props;
+  const { payload, complete, error, sessionId, nextUserText } = props;
   if (!payload) {
     if (complete && error) {
       return (
@@ -69,7 +73,7 @@ export function AskForm(props: Props): React.ReactElement {
     }
     return <AskFormSkeleton />;
   }
-  return <AskFormReady payload={payload} sessionId={sessionId} streaming={!complete} />;
+  return <AskFormReady payload={payload} sessionId={sessionId} streaming={!complete} nextUserText={nextUserText} />;
 }
 
 function AskFormSkeleton(): React.ReactElement {
@@ -91,9 +95,11 @@ interface ReadyProps {
   payload: AskFormPayload;
   sessionId?: string;
   streaming?: boolean;
+  nextUserText?: string | null;
 }
 
-function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.ReactElement {
+<<<<<<< HEAD
+function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProps): React.ReactElement {
   const { t } = useTranslation();
   const { questions, prompt } = payload;
   const formRef = useRef<HTMLDivElement | null>(null);
@@ -107,11 +113,20 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
   }, [sessionId, questions]);
   const cachedRecord = useMemo(() => getSubmissionRecord(cacheKey), [cacheKey]);
 
+  // Transcript-derived submission — read the user's next-turn reply for
+  // an "Answered: …" block and reconstruct selection. Wins over the
+  // in-memory cache so reopened sessions stay correct without persistence.
+  const transcriptSubmission = useMemo(
+    () => deriveAskSubmission(nextUserText, questions),
+    [nextUserText, questions],
+  );
+
   // Per-question selected labels. Use `Set<string>` so single + multi
   // share the same state shape; "Other" picks store the literal
   // OTHER_TOKEN. Per-question typed-other text in a parallel array.
   const [selectedByQuestion, setSelectedByQuestion] = useState<Set<string>[]>(
-    () => questions.map((q) => {
+    () => questions.map((q, i) => {
+      if (transcriptSubmission) return new Set(transcriptSubmission.selection[i]);
       if (!cachedRecord) return new Set();
       const qKey = questionCacheKey(q);
       const restored = new Set<string>();
@@ -126,12 +141,38 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
     }),
   );
   const [otherTextByQuestion, setOtherTextByQuestion] = useState<string[]>(
-    () => questions.map((q) => cachedRecord?.otherTextByKey?.[questionCacheKey(q)] ?? ''),
+    () => questions.map((q) => (
+      transcriptSubmission?.otherTextByKey[questionCacheKey(q)]
+      ?? cachedRecord?.otherTextByKey?.[questionCacheKey(q)]
+      ?? ''
+    )),
   );
-  const [submitted, setSubmitted] = useState<boolean>(cachedRecord !== null);
+  const [submitted, setSubmitted] = useState<boolean>(
+    transcriptSubmission !== null || cachedRecord !== null,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Tracks "user clicked Confirm in this mount" vs "bootstrapped from
+  // cache". Only a local submit makes our state authoritative — a cache
+  // bootstrap is just a hint and should yield to a later-arriving
+  // transcript, which is the durable source of truth. State (not a ref)
+  // so toggling it back after a failed submit re-runs the hydration
+  // effect to pick up any transcript that was already waiting.
+  const [localSubmit, setLocalSubmit] = useState<boolean>(false);
 
   const locked = submitted;
+
+  // Late-arriving transcript: if nextUserText hydrates after first paint
+  // (streaming session restore, async transcript fetch), apply the derived
+  // submission. Skip only when the user has submitted locally in this
+  // mount — bootstrap-from-cache must not block transcript hydration.
+  useEffect(() => {
+    if (!transcriptSubmission || localSubmit) return;
+    setSelectedByQuestion(questions.map((_, i) => new Set(transcriptSubmission.selection[i])));
+    setOtherTextByQuestion(questions.map((q) => (
+      transcriptSubmission.otherTextByKey[questionCacheKey(q)] ?? ''
+    )));
+    setSubmitted(true);
+  }, [transcriptSubmission, localSubmit, questions]);
 
   const togglePick = useCallback((qIdx: number, label: string): void => {
     const q = questions[qIdx];
@@ -195,6 +236,7 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
       return;
     }
     const message = formatAnswerMessage(questions, selectedByQuestion, otherTextByQuestion, t);
+    setLocalSubmit(true);
     setSubmitted(true);
     setSubmitError(null);
     try {
@@ -202,6 +244,7 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
       if (result?.error) {
         setSubmitError(result.error);
         setSubmitted(false);
+        setLocalSubmit(false);
       } else {
         // Persist enough to restore submitted view on remount.
         const flat: string[] = [];
@@ -217,6 +260,7 @@ function AskFormReady({ payload, sessionId, streaming }: ReadyProps): React.Reac
     } catch (err) {
       setSubmitError((err as Error).message);
       setSubmitted(false);
+      setLocalSubmit(false);
     }
   }, [t, canSubmit, locked, sessionId, questions, selectedByQuestion, otherTextByQuestion, cacheKey]);
 
@@ -317,7 +361,6 @@ function QuestionCard({ question, selected, otherText, locked, onToggle, onOther
   return (
     <div className="chatv2-askform__question">
       <div className="chatv2-askform__question-head">
-        {question.header && <span className="chatv2-askform__question-header">{question.header}</span>}
         <span className="chatv2-askform__question-text">{question.question}</span>
       </div>
       <ul className="chatv2-askform__options" role={question.multiSelect ? 'group' : 'radiogroup'}>
@@ -362,6 +405,67 @@ function QuestionCard({ question, selected, otherText, locked, onToggle, onOther
       </ul>
     </div>
   );
+}
+
+/**
+ * Reverse of formatAnswerMessage: parse the user-reply turn that follows
+ * this form and reconstruct which options were chosen per question.
+ * Returns null when the text isn't an "Answered: …" reply for this form.
+ *
+ * Exported for tests.
+ */
+export function deriveAskSubmission(
+  text: string | null | undefined,
+  questions: AskQuestion[],
+): { selection: Set<string>[]; otherTextByKey: Record<string, string> } | null {
+  if (!text) return null;
+  const head = text.trimStart();
+  if (!head.startsWith('Answered:')) return null;
+
+  const selection: Set<string>[] = questions.map(() => new Set<string>());
+  const otherTextByKey: Record<string, string> = {};
+
+  for (const rawLine of text.split('\n')) {
+    const m = rawLine.match(/^-\s*([^:]+):\s*(.+)$/);
+    if (!m) continue;
+    const labelPrefix = m[1].trim();
+    const valuesStr = m[2].trim();
+    const qIdx = questions.findIndex((q) => (q.header || q.question) === labelPrefix);
+    if (qIdx < 0) continue;
+
+    // Values are comma-separated. A free-text `Other: <text>` answer can
+    // itself contain commas, so we can't blindly split. Strategy: find
+    // ", Other:" (or a leading "Other:") and treat everything from there
+    // to the end of the line as a single Other value. The remainder is
+    // safe to split on /,\s+/ because predefined option labels are
+    // controlled by the agent and don't carry user free text.
+    let valuesPart = valuesStr;
+    let otherTail: string | null = null;
+    const otherIdx = (() => {
+      const leading = valuesPart.match(/^Other(?::|$)/);
+      if (leading) return 0;
+      const m = valuesPart.match(/,\s+Other(?::|$)/);
+      return m && m.index !== undefined ? m.index + m[0].indexOf('Other') : -1;
+    })();
+    if (otherIdx >= 0) {
+      otherTail = valuesPart.slice(otherIdx);
+      valuesPart = valuesPart.slice(0, otherIdx).replace(/,\s*$/, '');
+    }
+    for (const raw of valuesPart.split(/,\s+/)) {
+      const v = raw.trim();
+      if (!v) continue;
+      selection[qIdx].add(v);
+    }
+    if (otherTail !== null) {
+      selection[qIdx].add(OTHER_TOKEN);
+      if (otherTail.startsWith('Other:')) {
+        otherTextByKey[questionCacheKey(questions[qIdx])] = otherTail.slice('Other:'.length).trim();
+      }
+    }
+  }
+
+  if (selection.every((s) => s.size === 0)) return null;
+  return { selection, otherTextByKey };
 }
 
 function formatAnswerMessage(
