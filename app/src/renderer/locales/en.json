@@ -721,5 +721,6 @@
   "Writing file": "Writing file",
   "Wrote file": "Wrote file",
   "working": "working",
-  "shortcutDesc": "Press this shortcut from <1>any app on your computer</1> to open the command pill and send a task to an agent."
+  "shortcutDesc": "Press this shortcut from <1>any app on your computer</1> to open the command pill and send a task to an agent.",
+  "Sync cookies from a local Chromium browser profile so signed-in sites (Gmail, GitHub, internal tools) work in agent sessions without re-logging-in. Re-run anytime your local browser session changes.": "Sync cookies from a local Chromium browser profile so signed-in sites (Gmail, GitHub, internal tools) work in agent sessions without re-logging-in. Re-run anytime your local browser session changes."
 }

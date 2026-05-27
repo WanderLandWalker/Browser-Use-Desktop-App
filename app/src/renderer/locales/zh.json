@@ -721,5 +721,6 @@
   "Writing file": "正在写入文件",
   "Wrote file": "已写入文件",
   "working": "工作中",
-  "shortcutDesc": "从 <1>计算机上的任何应用</1> 按下此快捷键以打开命令栏并向代理发送任务。"
+  "shortcutDesc": "从 <1>计算机上的任何应用</1> 按下此快捷键以打开命令栏并向代理发送任务。",
+  "Sync cookies from a local Chromium browser profile so signed-in sites (Gmail, GitHub, internal tools) work in agent sessions without re-logging-in. Re-run anytime your local browser session changes.": "从本地 Chromium 浏览器配置文件同步 Cookie，让已登录的网站（Gmail、GitHub、内部工具等）在代理会话中无需重新登录。本地浏览器会话变化后可随时重新同步。"
 }
