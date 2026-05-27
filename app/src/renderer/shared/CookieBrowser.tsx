@@ -227,16 +227,16 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
     <div className="cb-root">
       {!hideHeader && (
         <div className="cb-header">
-          <span className="cb-title">Browser cookies</span>
+          <span className="cb-title">{t('Browser cookies')}</span>
           <p className="cb-subtitle">
-            Sync cookies from a local Chromium browser profile so signed-in sites (Gmail, GitHub, internal tools) work in agent sessions without re-logging-in. Re-run anytime your local browser session changes.
+            {t('Sync cookies from a local Chromium browser profile so signed-in sites (Gmail, GitHub, internal tools) work in agent sessions without re-logging-in. Re-run anytime your local browser session changes.')}
           </p>
         </div>
       )}
 
       <div className="cb-section">
         <div className="cb-section-head">
-          <span className="cb-section-title">Browser profiles</span>
+          <span className="cb-section-title">{t('Browser profiles')}</span>
           <button
             type="button"
             className="cb-btn cb-btn--ghost"
@@ -294,7 +294,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
 
       <div className="cb-section">
         <div className="cb-section-head">
-          <span className="cb-section-title">Sites in agent jar</span>
+          <span className="cb-section-title">{t('Sites in agent jar')}</span>
           <button
             type="button"
             className="cb-btn cb-btn--ghost"
