@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import i18n from '../../i18n';
 
 /**
  * Cycling "Working" verb shown next to the spinner while an agent is busy.
@@ -32,13 +31,13 @@ export interface SpinnerPreset {
 
 export const PRESETS: Readonly<Record<Exclude<SpinnerPresetId, 'custom'>, SpinnerPreset>> = {
   classic: {
-    label: i18n.t('Classic'),
-    description: i18n.t('Just "Working".'),
+    label: 'Classic',
+    description: 'Just "Working".',
     verbs: ['Working'],
   },
   playful: {
-    label: i18n.t('Playful'),
-    description: i18n.t('Whimsical gerunds that rotate while the agent runs.'),
+    label: 'Playful',
+    description: 'Whimsical gerunds that rotate while the agent runs.',
     verbs: [
       'Brewing',
       'Pondering',
@@ -58,28 +57,28 @@ export const PRESETS: Readonly<Record<Exclude<SpinnerPresetId, 'custom'>, Spinne
     ],
   },
   cafe: {
-    label: i18n.t('Cafe'),
-    description: i18n.t('Espresso bar vibes.'),
+    label: 'Cafe',
+    description: 'Espresso bar vibes.',
     verbs: ['Brewing', 'Steeping', 'Frothing', 'Pressing', 'Drizzling', 'Whisking', 'Pouring', 'Tamping', 'Grinding'],
   },
   wizard: {
-    label: i18n.t('Wizard'),
-    description: i18n.t('Arcane and overconfident.'),
+    label: 'Wizard',
+    description: 'Arcane and overconfident.',
     verbs: ['Conjuring', 'Enchanting', 'Divining', 'Scrying', 'Summoning', 'Incanting', 'Bewitching', 'Channeling'],
   },
   lab: {
-    label: i18n.t('Lab'),
-    description: i18n.t('Lab-coat earnest.'),
+    label: 'Lab',
+    description: 'Lab-coat earnest.',
     verbs: ['Calibrating', 'Synthesizing', 'Analyzing', 'Hypothesizing', 'Computing', 'Modelling', 'Refining', 'Measuring'],
   },
   cosmic: {
-    label: i18n.t('Cosmic'),
-    description: i18n.t('Space-opera dramatic.'),
+    label: 'Cosmic',
+    description: 'Space-opera dramatic.',
     verbs: ['Orbiting', 'Warping', 'Aligning', 'Charting', 'Navigating', 'Stargazing', 'Refracting', 'Drifting'],
   },
   forge: {
-    label: i18n.t('Forge'),
-    description: i18n.t('Hammer-and-anvil verbs.'),
+    label: 'Forge',
+    description: 'Hammer-and-anvil verbs.',
     verbs: ['Forging', 'Hammering', 'Tempering', 'Quenching', 'Smelting', 'Annealing', 'Shaping', 'Polishing'],
   },
 };

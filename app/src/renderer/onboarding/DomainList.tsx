@@ -51,7 +51,7 @@ export function DomainList({ domains, collapsible = false, header }: DomainListP
               <>
                 <GlobeIcon />
                 <span className="dl-header-label">
-                  {t('Cookie Domains')}{processedDomains.length > 0 && ` (${processedDomains.length})`}
+                  {processedDomains.length > 0 ? t('Cookie Domains ($1)', { '1': processedDomains.length }) : t('Cookie Domains')}
                 </span>
               </>
             )}

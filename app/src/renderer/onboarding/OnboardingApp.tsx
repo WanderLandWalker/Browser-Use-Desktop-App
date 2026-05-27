@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { OnboardingCookieList } from './OnboardingCookieList';
 import introImage from './intro.png';
 import claudeCodeLogo from './claude-code-logo.svg';
@@ -1385,7 +1385,9 @@ export function OnboardingApp() {
           <div className="step-panel">
             <h1 className="step-title">{t('Set up your global shortcut')}</h1>
             <p className="step-subtitle">
-              {t('Press this shortcut from')} <strong>{t('any app on your computer')}</strong> {t('to open the command pill and send a task to an agent.')}
+              <Trans i18nKey="shortcutDesc">
+  Press this shortcut from <strong>any app on your computer</strong> to open the command pill and send a task to an agent.
+</Trans>
             </p>
 
             <div className="shortcut-demo">

@@ -27,7 +27,11 @@ void i18n.use(initReactI18next).init({
   resources: { en: { translation: en }, zh: { translation: zh } },
   lng: savedLang,
   fallbackLng: 'en',
-  interpolation: { escapeValue: false },
+  interpolation: {
+    escapeValue: false,
+    prefix: '$',
+    suffix: '',
+  },
   returnObjects: false,
   keySeparator: false,
   nsSeparator: false,

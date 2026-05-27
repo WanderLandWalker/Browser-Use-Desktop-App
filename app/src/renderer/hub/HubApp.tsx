@@ -427,7 +427,7 @@ export function HubApp(): React.ReactElement {
     if (!api) return;
     try {
       console.log('[HubApp] resume', { sessionId });
-      const result = await api.sessions.resume(sessionId, t('Continue from where you left off.'));
+      const result = await api.sessions.resume(sessionId, 'Continue from where you left off.');
       if (result?.error) {
         console.warn('[HubApp] resume error', { sessionId, error: result.error });
         updateSession(sessionId, { status: 'stopped' as const, error: result.error });

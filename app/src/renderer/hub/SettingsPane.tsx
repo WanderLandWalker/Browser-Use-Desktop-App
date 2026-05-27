@@ -158,7 +158,7 @@ function SpinnerVerbsSection(): React.ReactElement {
           aria-label={t('Spinner verb preset')}
         >
           {presetOptions.map(([id, preset]) => (
-            <option key={id} value={id}>{preset.label}</option>
+            <option key={id} value={id}>{t(preset.label)}</option>
           ))}
           <option value="custom">{t('Custom')}</option>
         </select>
@@ -168,7 +168,7 @@ function SpinnerVerbsSection(): React.ReactElement {
         label={t('Preview')}
         sublabel={presetId === 'custom'
           ? t('$1 custom verb$2.', { 1: activePreview.length, 2: activePreview.length === 1 ? '' : 's' })
-          : SPINNER_VERB_PRESETS[presetId].description}
+          : t(SPINNER_VERB_PRESETS[presetId].description)}
       >
         <div className="settings-pane__value" style={{ maxWidth: 320, textAlign: 'right' }}>
           {activePreview.slice(0, 6).join(' / ')}{activePreview.length > 6 ? ' ...' : ''}
