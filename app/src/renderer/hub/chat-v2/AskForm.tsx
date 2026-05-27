@@ -98,7 +98,6 @@ interface ReadyProps {
   nextUserText?: string | null;
 }
 
-<<<<<<< HEAD
 function AskFormReady({ payload, sessionId, streaming, nextUserText }: ReadyProps): React.ReactElement {
   const { t } = useTranslation();
   const { questions, prompt } = payload;
