@@ -4,17 +4,21 @@
 
 # Browser Use Desktop App
 
-> 在桌面上运行一群浏览器代理。
+> 在桌面上运行一组浏览器代理。
 
 其他 AI 浏览器总想把浏览器和代理合二为一。你不用换 Chrome——这个只是代理端。
 
-把你的 Cookie 导入全新的 Chromium，代理就能在你登录过的网站保持登录。还可以用全局快捷键从任何地方启动任务。
+把你的 Cookie 导入全新的 Chromium，代理就能在你访问过的所有网站自动保持登录。还可以用全局快捷键从任何地方启动任务。
 
 基于 [Browser Harness](https://github.com/browser-use/browser-harness) 构建。
 
 <img width="3542" height="2298" alt="CleanShot 2026-05-01 at 12 18 27@2x" src="https://github.com/user-attachments/assets/edd4f6e0-0efe-4b16-b772-b73d5a1a6d23" />
 
 ## 下载
+
+[![下载 macOS 版](https://img.shields.io/badge/Download_for_macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-arm64.dmg)
+[![下载 Windows 版](https://img.shields.io/badge/Download_for_Windows-0078D4?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4OCA4OCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMTIuNCAzNiA3LjV2MzQuOEgwem00MC4zLTUuNUw4OCAwdjQxLjhINDAuM3pNMCA0NS43aDM2djM0LjhMMCA3NS42em00MC4zLjVIODhWODhsLTQ3LjctNi43eiIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-Setup.exe)
+[![下载 Linux 版](https://img.shields.io/badge/Download_for_Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-x64.AppImage)
 
 **macOS (Apple Silicon):** [Browser-Use-arm64.dmg](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-arm64.dmg)
 
@@ -38,20 +42,6 @@
 ## 国际化
 
 本应用支持简体中文和 English 界面。在 **设置 → 语言** 中切换。
-
-## 开发
-
-需要 [Task](https://taskfile.dev)（`brew install go-task`）。
-
-```bash
-task up    # 安装依赖并启动应用
-```
-
-Linux 包在 Docker 中构建，避免本地系统工具影响构建结果：
-
-```bash
-task linux:make:docker
-```
 
 ## 许可证
 
