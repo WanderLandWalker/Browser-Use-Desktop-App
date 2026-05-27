@@ -189,7 +189,7 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
       const domainCount = result.domains?.length ?? 0;
       toast.show({
         variant: 'success',
-        title: `Synced ${result.imported} cookies`,
+        title: t('Synced $1 cookies', { '1': result.imported }),
         message: `${result.browserName} · ${domainCount} ${domainCount === 1 ? 'site' : 'sites'}`,
       });
     } catch (err) {
@@ -268,9 +268,9 @@ export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
                     {subtitle && <span className="cb-profile-email">{subtitle}</span>}
                     {record && (
                       <span className="cb-profile-result" title={new Date(record.last_synced_at).toLocaleString()}>
-                        Synced {relativeTime(record.last_synced_at)} · {record.domain_count.toLocaleString()} domains
+                        {t('Synced $1 · $2 domains', { '1': relativeTime(record.last_synced_at), '2': record.domain_count.toLocaleString() })}
                         {typeof record.new_domain_count === 'number' && typeof record.updated_domain_count === 'number' && (
-                          <> ({record.new_domain_count.toLocaleString()} new, {record.updated_domain_count.toLocaleString()} re-synced)</>
+                          <> {t('($1 new, $2 re-synced)', { '1': record.new_domain_count.toLocaleString(), '2': record.updated_domain_count.toLocaleString() })}</>
                         )}
                       </span>
                     )}
