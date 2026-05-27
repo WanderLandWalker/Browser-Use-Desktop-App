@@ -115,7 +115,7 @@ app/src/renderer/
 ### 在新文件中使用 i18n
 
 - **React 组件：** 从 `react-i18next` 导入 `useTranslation`，调用 `t()` 函数。
-- **模块级代码（组件外）：** 从 `../i18n` 导入 `i18n`，调用 `i18n.t()`。
+- **模块级代码（组件外）：** 根据文件深度从相对路径导入 `i18n`（如 `../i18n` 或 `../../i18n`），调用 `i18n.t()`。
 - 全部 5 个渲染进程入口（`hub/`、`onboarding/`、`pill/`、`popup/`、`logs/`）已包裹 `<I18nextProvider>`，内部的任何组件均可使用该 hook。
 
 ## 提问

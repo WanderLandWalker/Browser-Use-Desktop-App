@@ -118,7 +118,7 @@ app/src/renderer/
 ### Adding i18n to a new file
 
 - **React components:** import `useTranslation` from `react-i18next`, call the `t()` function.
-- **Module-level code (outside components):** import `i18n` from `../i18n`, call `i18n.t()`.
+- **Module-level code (outside components):** import `i18n` from the relative path to `i18n.ts` (e.g. `../i18n` or `../../i18n` depending on file depth), call `i18n.t()`.
 - All 5 renderer entry points (`hub/`, `onboarding/`, `pill/`, `popup/`, `logs/`) already wrap their content with `<I18nextProvider>`, so any component inside them can use the hook.
 
 ## Where to ask questions
