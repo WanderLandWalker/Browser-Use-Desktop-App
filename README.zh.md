@@ -4,15 +4,11 @@
 
 # Browser Use Desktop App
 
-> 在您的桌面上运行一群浏览器代理。
+> 在桌面上运行一群浏览器代理。
 
-[![下载 macOS 版](https://img.shields.io/badge/下载_macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-arm64.dmg)
-[![下载 Windows 版](https://img.shields.io/badge/下载_Windows-0078D4?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4OCA4OCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMTIuNCAzNiA3LjV2MzQuOEgwem00MC4zLTUuNUw4OCAwdjQxLjhINDAuM3pNMCA0NS43aDM2djM0LjhMMCA3NS42em00MC4zLjVIODhWODhsLTQ3LjctNi43eiIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-Setup.exe)
-[![下载 Linux 版](https://img.shields.io/badge/下载_Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/browser-use/desktop/releases/latest/download/Browser-Use-x64.AppImage)
+其他 AI 浏览器总想把浏览器和代理合二为一。你不用换 Chrome——这个只是代理端。
 
-每个 AI 浏览器都试图同时成为浏览器和代理。保留你常用的 Chrome——这只是代理端。
-
-将你的 Cookie 导入全新的 Chromium 实例，让代理在你登录过的所有地方保持登录状态，并通过全局快捷键从任何地方启动任务。
+把你的 Cookie 导入全新的 Chromium，代理就能在你登录过的网站保持登录。还可以用全局快捷键从任何地方启动任务。
 
 基于 [Browser Harness](https://github.com/browser-use/browser-harness) 构建。
 
@@ -35,9 +31,9 @@
 
 ## 通道
 
-入站消息通道可以自动触发代理会话。
+消息通道可以自动触发代理会话。
 
-- **WhatsApp** — 给自己发送带有 `@BU` 的短信，发送和接收代理消息
+- **WhatsApp** — 给自己发一条带 `@BU` 的消息，即可收发代理消息
 
 ## 国际化
 
@@ -51,7 +47,7 @@
 task up    # 安装依赖并启动应用
 ```
 
-Linux 包在 Docker 中构建，避免本地工具链影响输出：
+Linux 包在 Docker 中构建，避免本地系统工具影响构建结果：
 
 ```bash
 task linux:make:docker
