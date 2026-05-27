@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { extractHostname, getFaviconUrl, isDefaultFavicon, sortDomains } from './domain-utils';
 import { BrowserLogoAvatar } from './BrowserLogoAvatar';
 import { userFacingIpcError } from './ipcErrors';
@@ -84,17 +85,17 @@ function normalizeDomain(domain: string): string {
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 0) return 'just now';
+  if (ms < 0) return i18n.t('just now');
   const m = Math.floor(ms / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return i18n.t('just now');
+  if (m < 60) return String(m) + i18n.t('m ago');
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return String(h) + i18n.t('h ago');
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
+  if (d < 30) return String(d) + i18n.t('d ago');
   const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.floor(mo / 12)}y ago`;
+  if (mo < 12) return String(mo) + i18n.t('mo ago');
+  return String(Math.floor(mo / 12)) + i18n.t('y ago');
 }
 
 export function CookieBrowser({ api, hideHeader }: Props): React.ReactElement {
